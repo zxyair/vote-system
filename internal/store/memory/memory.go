@@ -19,19 +19,47 @@ type Store struct {
 	votes map[string]map[string]string
 	// userID -> set(pollID)
 	created map[string]map[string]struct{}
+	// userID -> idempotencyKey -> created pollID (expires at)
+	createIdem map[string]map[string]createIdemEntry
+}
+
+type createIdemEntry struct {
+	pollID    string
+	expiresAt time.Time
 }
 
 func New() *Store {
 	return &Store{
-		polls: map[string]service.Poll{},
-		votes: map[string]map[string]string{},
-		created: map[string]map[string]struct{}{},
+		polls:      map[string]service.Poll{},
+		votes:      map[string]map[string]string{},
+		created:    map[string]map[string]struct{}{},
+		createIdem: map[string]map[string]createIdemEntry{},
 	}
 }
 
-func (s *Store) CreatePoll(_ context.Context, p service.Poll) (service.Poll, error) {
+func (s *Store) CreatePoll(_ context.Context, p service.Poll, idempotencyKey string) (service.Poll, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if idempotencyKey != "" {
+		now := time.Now()
+		m := s.createIdem[p.CreatedBy]
+		if m == nil {
+			m = map[string]createIdemEntry{}
+			s.createIdem[p.CreatedBy] = m
+		}
+		if ent, ok := m[idempotencyKey]; ok {
+			if now.Before(ent.expiresAt) {
+				if existing, ok := s.polls[ent.pollID]; ok {
+					return clonePoll(existing), nil
+				}
+			}
+			delete(m, idempotencyKey)
+		}
+		// reserve idempotency for 5 minutes (same as Redis)
+		m[idempotencyKey] = createIdemEntry{pollID: p.ID, expiresAt: now.Add(5 * time.Minute)}
+	}
+
 	s.polls[p.ID] = p
 	if s.created[p.CreatedBy] == nil {
 		s.created[p.CreatedBy] = map[string]struct{}{}

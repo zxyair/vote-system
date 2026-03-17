@@ -134,4 +134,3 @@ func (h *sseHub) notifyPoll(pollID string, msg []byte) {
 		}
 	}
 }
-

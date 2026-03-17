@@ -103,4 +103,3 @@ func (h *HTTP) PollSSE(c *gin.Context) {
 		}
 	}
 }
-

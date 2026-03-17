@@ -15,7 +15,101 @@ const (
 	undoForbidden = 2
 	undoConflict  = 3
 	undoNoop      = 4
+
+	createOK       = 0
+	createNoop     = 1
+	createBadInput = 2
 )
+
+var createPollScript = goredis.NewScript(`
+-- KEYS:
+-- 1 idem_key
+-- 2 poll_meta_key
+-- 3 poll_options_key
+-- 4 poll_votes_key
+-- 5 poll_voters_key
+-- 6 polls_index_key
+-- 7 polls_public_index_key
+-- 8 user_created_polls_zset_key
+--
+-- ARGV:
+-- 1 user_id
+-- 2 idempotency_key
+-- 3 poll_id
+-- 4 question
+-- 5 created_at_unix
+-- 6 expires_at_unix
+-- 7 is_public ("true"/"false")
+-- 8 created_score (float string)
+-- 9 options_count
+-- 10.. options
+
+local idem = KEYS[1]
+local poll_meta = KEYS[2]
+local poll_opts = KEYS[3]
+local poll_votes = KEYS[4]
+local poll_voters = KEYS[5]
+local polls_index = KEYS[6]
+local polls_public = KEYS[7]
+local user_created = KEYS[8]
+
+local user_id = ARGV[1]
+local idem_key = ARGV[2]
+local poll_id = ARGV[3]
+local question = ARGV[4]
+local created_at = ARGV[5]
+local expires_at = ARGV[6]
+local is_public = ARGV[7]
+local score = ARGV[8]
+local nopts = tonumber(ARGV[9])
+
+if not nopts or nopts < 1 then
+  return {2, ""}
+end
+
+if idem_key ~= "" then
+  local existing = redis.call("GET", idem)
+  if existing then
+    return {1, existing}
+  end
+  -- reserve idempotency for 5 minutes to avoid duplicates
+  local ok = redis.call("SET", idem, poll_id, "NX", "EX", 300)
+  if not ok then
+    local v = redis.call("GET", idem)
+    if v then
+      return {1, v}
+    end
+  end
+end
+
+-- create poll meta
+redis.call("HSET", poll_meta,
+  "id", poll_id,
+  "question", question,
+  "created_by", user_id,
+  "updated_by", user_id,
+  "created_at", created_at,
+  "expires_at", expires_at,
+  "is_closed", "false",
+  "is_public", is_public
+)
+
+-- options/votes
+for i=0,nopts-1 do
+  local opt = ARGV[10+i]
+  redis.call("HSET", poll_opts, tostring(i), opt)
+  redis.call("HSET", poll_votes, opt, 0)
+end
+
+redis.call("SADD", polls_index, poll_id)
+if is_public == "true" then
+  redis.call("SADD", polls_public, poll_id)
+end
+redis.call("ZADD", user_created, score, poll_id)
+redis.call("DEL", poll_voters)
+
+return {0, poll_id}
+`)
 
 var voteScript = goredis.NewScript(`
 -- KEYS:

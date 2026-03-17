@@ -2,9 +2,9 @@ package redis
 
 import (
 	"context"
-	"hash/crc32"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"strconv"
 	"time"
 
@@ -21,7 +21,53 @@ func New(rdb *goredis.Client) *Store {
 	return &Store{rdb: rdb}
 }
 
-func (s *Store) CreatePoll(ctx context.Context, p service.Poll) (service.Poll, error) {
+func (s *Store) CreatePoll(ctx context.Context, p service.Poll, idempotencyKey string) (service.Poll, error) {
+	// Idempotent create: if Idempotency-Key is provided and already used, return the existing poll.
+	if idempotencyKey != "" {
+		args := make([]any, 0, 9+len(p.Options))
+		args = append(args,
+			p.CreatedBy,
+			idempotencyKey,
+			p.ID,
+			p.Question,
+			strconv.FormatInt(p.CreatedAt.Unix(), 10),
+			strconv.FormatInt(p.ExpiresAt.Unix(), 10),
+			boolToRedis(p.IsPublic),
+			fmt.Sprintf("%0.6f", createdScore(p.CreatedAt, p.ID)),
+			strconv.Itoa(len(p.Options)),
+		)
+		for _, opt := range p.Options {
+			args = append(args, opt)
+		}
+
+		res, err := createPollScript.Run(ctx, s.rdb, []string{
+			idemKey(p.CreatedBy, idempotencyKey),
+			pollMetaKey(p.ID),
+			pollOptionsKey(p.ID),
+			pollVotesKey(p.ID),
+			pollVotersKey(p.ID),
+			pollsIndexKey(),
+			pollsPublicIndexKey(),
+			userCreatedPollsKey(p.CreatedBy),
+		}, args...).Slice()
+		if err != nil {
+			return service.Poll{}, err
+		}
+		if len(res) >= 2 {
+			code, _ := res[0].(int64)
+			pollID, _ := res[1].(string)
+			switch code {
+			case createOK:
+				return s.getPoll(ctx, pollID)
+			case createNoop:
+				return s.getPoll(ctx, pollID)
+			default:
+				return service.Poll{}, fmt.Errorf("unknown create result: %v", res)
+			}
+		}
+		return service.Poll{}, fmt.Errorf("unexpected create result: %v", res)
+	}
+
 	pipe := s.rdb.TxPipeline()
 
 	pollKey := pollMetaKey(p.ID)
@@ -382,10 +428,10 @@ func (s *Store) ListMyCreatedPollStats(ctx context.Context, userID string, q ser
 	}
 
 	rows, err := s.rdb.ZRevRangeByScoreWithScores(ctx, userCreatedPollsKey(userID), &goredis.ZRangeBy{
-		Max:   max,
-		Min:   "-inf",
+		Max:    max,
+		Min:    "-inf",
 		Offset: 0,
-		Count: int64(limit + 1),
+		Count:  int64(limit + 1),
 	}).Result()
 	if err != nil {
 		return nil, "", err
@@ -500,7 +546,7 @@ func boolToRedis(v bool) string {
 	return "false"
 }
 
-func pollsIndexKey() string { return "polls:index" }
+func pollsIndexKey() string       { return "polls:index" }
 func pollsPublicIndexKey() string { return "polls:public" }
 func pollMetaKey(id string) string {
 	return fmt.Sprintf("poll:%s", id)

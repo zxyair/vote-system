@@ -1,0 +1,10 @@
+prometheus:
+  prometheusSpec:
+    serviceMonitorSelector:
+      matchLabels:
+        release: kube-prometheus-stack
+    serviceMonitorNamespaceSelector: {}
+
+grafana:
+  adminPassword: "admin"
+

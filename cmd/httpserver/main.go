@@ -11,6 +11,7 @@ import (
 
 	votingv1 "vote-system/internal/gen/voting/v1"
 	"vote-system/internal/http/router"
+	"vote-system/internal/obs"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -26,6 +27,7 @@ func main() {
 	}
 	defer conn.Close()
 
+	obs.RegisterAll()
 	client := votingv1.NewVotingServiceClient(conn)
 	r := router.SetupRouter(client)
 

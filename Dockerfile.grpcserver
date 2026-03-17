@@ -1,0 +1,18 @@
+FROM golang:1.25-alpine AS build
+WORKDIR /src
+RUN apk add --no-cache ca-certificates tzdata
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/grpcserver ./cmd/grpcserver
+
+FROM alpine:3.21
+RUN apk add --no-cache ca-certificates tzdata
+WORKDIR /app
+COPY --from=build /out/grpcserver ./grpcserver
+EXPOSE 9090
+ENV GRPC_ADDR=":9090"
+ENTRYPOINT ["./grpcserver"]
+

@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,16 +12,19 @@ import (
 
 	votingv1 "vote-system/internal/gen/voting/v1"
 	grpcserver "vote-system/internal/grpc/server"
+	"vote-system/internal/obs"
 	"vote-system/internal/service"
 	memorystore "vote-system/internal/store/memory"
 	redisstore "vote-system/internal/store/redis"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	goredis "github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 )
 
 func main() {
 	addr := getenv("GRPC_ADDR", ":9090")
+	metricsAddr := getenv("METRICS_ADDR", ":2112")
 	redisAddr := os.Getenv("REDIS_ADDR")
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 
@@ -43,9 +47,10 @@ func main() {
 	} else {
 		log.Printf("REDIS_ADDR not set, using memory store")
 	}
+	obs.RegisterAll()
 	svc := service.New(store)
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(grpc.UnaryInterceptor(grpcserver.MetricsUnaryInterceptor()))
 	votingv1.RegisterVotingServiceServer(s, grpcserver.New(svc))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -55,6 +60,16 @@ func main() {
 		log.Printf("gRPC server running %s", addr)
 		if err := s.Serve(lis); err != nil {
 			log.Printf("grpc serve error: %v", err)
+		}
+	}()
+
+	go func() {
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", promhttp.Handler())
+		srv := &http.Server{Addr: metricsAddr, Handler: mux}
+		log.Printf("metrics server running %s", metricsAddr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("metrics serve error: %v", err)
 		}
 	}()
 

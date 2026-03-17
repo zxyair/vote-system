@@ -6,13 +6,14 @@ import (
 	"time"
 
 	votingv1 "vote-system/internal/gen/voting/v1"
+	"vote-system/internal/obs"
 
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Store interface {
-	CreatePoll(ctx context.Context, p Poll) (Poll, error)
+	CreatePoll(ctx context.Context, p Poll, idempotencyKey string) (Poll, error)
 	ClosePoll(ctx context.Context, pollID, userID, idempotencyKey string) (Poll, error)
 	DeletePoll(ctx context.Context, pollID, userID, idempotencyKey string) (bool, error)
 	Vote(ctx context.Context, pollID, userID, option, idempotencyKey string) (Poll, error)
@@ -37,13 +38,16 @@ func New(store Store) *Service {
 func (s *Service) CreatePoll(ctx context.Context, req *votingv1.CreatePollRequest) (*votingv1.Poll, error) {
 	userID := strings.TrimSpace(req.GetUserId())
 	if userID == "" {
+		obs.VoteOp("create", "unauthenticated")
 		return nil, ErrUnauthenticated
 	}
 	if strings.TrimSpace(req.GetQuestion()) == "" {
+		obs.VoteOp("create", "invalid")
 		return nil, ErrInvalid
 	}
 	expiresAt := req.GetExpiresAt().AsTime()
 	if req.GetExpiresAt() == nil || expiresAt.Before(time.Now().Add(30*time.Second)) {
+		obs.VoteOp("create", "invalid")
 		return nil, ErrInvalid
 	}
 
@@ -58,12 +62,14 @@ func (s *Service) CreatePoll(ctx context.Context, req *votingv1.CreatePollReques
 		}
 		if _, ok := seen[o]; ok {
 			// 前端会友好提示，这里统一返回 ErrInvalid
+			obs.VoteOp("create", "invalid")
 			return nil, ErrInvalid
 		}
 		seen[o] = struct{}{}
 		cleanOpts = append(cleanOpts, o)
 	}
 	if len(cleanOpts) < 3 {
+		obs.VoteOp("create", "invalid")
 		return nil, ErrInvalid
 	}
 
@@ -80,10 +86,12 @@ func (s *Service) CreatePoll(ctx context.Context, req *votingv1.CreatePollReques
 		IsPublic:  req.GetIsPublic(),
 	}
 
-	created, err := s.store.CreatePoll(ctx, p)
+	created, err := s.store.CreatePoll(ctx, p, req.GetIdempotencyKey())
 	if err != nil {
+		obs.VoteOp("create", resultFromErr(err))
 		return nil, err
 	}
+	obs.VoteOp("create", "ok")
 	return toProtoPoll(created), nil
 }
 
@@ -102,68 +110,106 @@ func (s *Service) GetPoll(ctx context.Context, req *votingv1.GetPollRequest) (*v
 func (s *Service) ClosePoll(ctx context.Context, req *votingv1.ClosePollRequest) (*votingv1.Poll, error) {
 	userID := strings.TrimSpace(req.GetUserId())
 	if userID == "" {
+		obs.VoteOp("close", "unauthenticated")
 		return nil, ErrUnauthenticated
 	}
 	pollID := strings.TrimSpace(req.GetPollId())
 	if pollID == "" {
+		obs.VoteOp("close", "invalid")
 		return nil, ErrInvalid
 	}
 
 	closed, err := s.store.ClosePoll(ctx, pollID, userID, req.GetIdempotencyKey())
 	if err != nil {
+		obs.VoteOp("close", resultFromErr(err))
 		return nil, err
 	}
+	obs.VoteOp("close", "ok")
 	return toProtoPoll(closed), nil
 }
 
 func (s *Service) DeletePoll(ctx context.Context, req *votingv1.DeletePollRequest) (bool, error) {
 	userID := strings.TrimSpace(req.GetUserId())
 	if userID == "" {
+		obs.VoteOp("delete", "unauthenticated")
 		return false, ErrUnauthenticated
 	}
 	pollID := strings.TrimSpace(req.GetPollId())
 	if pollID == "" {
+		obs.VoteOp("delete", "invalid")
 		return false, ErrInvalid
 	}
-	return s.store.DeletePoll(ctx, pollID, userID, req.GetIdempotencyKey())
+	deleted, err := s.store.DeletePoll(ctx, pollID, userID, req.GetIdempotencyKey())
+	if err != nil {
+		obs.VoteOp("delete", resultFromErr(err))
+		return false, err
+	}
+	obs.VoteOp("delete", "ok")
+	return deleted, nil
 }
 
 func (s *Service) Vote(ctx context.Context, req *votingv1.VoteRequest) (*votingv1.Poll, error) {
 	userID := strings.TrimSpace(req.GetUserId())
 	if userID == "" {
+		obs.VoteOp("vote", "unauthenticated")
 		return nil, ErrUnauthenticated
 	}
 	pollID := strings.TrimSpace(req.GetPollId())
 	if pollID == "" {
+		obs.VoteOp("vote", "invalid")
 		return nil, ErrInvalid
 	}
 	option := strings.TrimSpace(req.GetOption())
 	if option == "" {
+		obs.VoteOp("vote", "invalid")
 		return nil, ErrInvalid
 	}
 
 	p, err := s.store.Vote(ctx, pollID, userID, option, req.GetIdempotencyKey())
 	if err != nil {
+		obs.VoteOp("vote", resultFromErr(err))
 		return nil, err
 	}
+	obs.VoteOp("vote", "ok")
 	return toProtoPoll(p), nil
 }
 
 func (s *Service) UndoVote(ctx context.Context, req *votingv1.UndoVoteRequest) (*votingv1.Poll, error) {
 	userID := strings.TrimSpace(req.GetUserId())
 	if userID == "" {
+		obs.VoteOp("undo", "unauthenticated")
 		return nil, ErrUnauthenticated
 	}
 	pollID := strings.TrimSpace(req.GetPollId())
 	if pollID == "" {
+		obs.VoteOp("undo", "invalid")
 		return nil, ErrInvalid
 	}
 
 	p, err := s.store.UndoVote(ctx, pollID, userID, req.GetIdempotencyKey())
 	if err != nil {
+		obs.VoteOp("undo", resultFromErr(err))
 		return nil, err
 	}
+	obs.VoteOp("undo", "ok")
 	return toProtoPoll(p), nil
+}
+
+func resultFromErr(err error) string {
+	switch {
+	case IsInvalid(err):
+		return "invalid"
+	case IsUnauthenticated(err):
+		return "unauthenticated"
+	case IsForbidden(err):
+		return "forbidden"
+	case IsNotFound(err):
+		return "notfound"
+	case IsConflict(err):
+		return "conflict"
+	default:
+		return "internal"
+	}
 }
 
 func (s *Service) SearchPolls(ctx context.Context, req *votingv1.SearchPollsRequest) ([]*votingv1.PollSummary, string, error) {

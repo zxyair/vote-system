@@ -11,14 +11,17 @@ import (
 	"vote-system/internal/http/middleware"
 
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func SetupRouter(client votingv1.VotingServiceClient) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(middleware.TokenBucket(200, 400, 20, 40))
+	r.Use(middleware.Metrics())
 
 	r.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	hub := handler.NewSSEHubForRouter()
 	h := handler.New(client, hub)
