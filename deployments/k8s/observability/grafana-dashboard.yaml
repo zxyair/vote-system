@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-voting
+  namespace: voting
+  labels:
+    grafana_dashboard: "1"
+data:
+  voting-dashboard.json: |
+    {
+      "annotations": { "list": [] },
+      "editable": true,
+      "graphTooltip": 0,
+      "panels": [
+        {
+          "id": 1,
+          "type": "timeseries",
+          "title": "HTTP QPS (httpserver)",
+          "targets": [
+            {
+              "expr": "sum(rate(voting_httpserver_requests_total[1m]))",
+              "legendFormat": "qps"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+        },
+        {
+          "id": 2,
+          "type": "timeseries",
+          "title": "HTTP Latency p95/p99 (httpserver)",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(voting_httpserver_request_duration_seconds_bucket[5m])))",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(voting_httpserver_request_duration_seconds_bucket[5m])))",
+              "legendFormat": "p99"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+        },
+        {
+          "id": 3,
+          "type": "timeseries",
+          "title": "gRPC non-OK rate (grpcserver)",
+          "targets": [
+            {
+              "expr": "sum(rate(voting_grpcserver_requests_total{code!=\"OK\"}[1m]))",
+              "legendFormat": "non_ok_rps"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+        },
+        {
+          "id": 4,
+          "type": "timeseries",
+          "title": "Redis ops/sec & memory",
+          "targets": [
+            {
+              "expr": "sum(rate(redis_commands_processed_total[1m]))",
+              "legendFormat": "ops"
+            },
+            {
+              "expr": "redis_memory_used_bytes",
+              "legendFormat": "mem_used"
+            }
+          ],
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+        }
+      ],
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["voting"],
+      "templating": { "list": [] },
+      "time": { "from": "now-15m", "to": "now" },
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Voting App (Minimal)",
+      "uid": "voting-minimal",
+      "version": 1
+    }
+

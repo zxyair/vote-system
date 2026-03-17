@@ -5,4 +5,6 @@ resources:
   - ../base
   - redis-exporter.yaml
   - servicemonitors.yaml
+  - prometheusrules.yaml
+  - grafana-dashboard.yaml
 

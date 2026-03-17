@@ -83,9 +83,17 @@ fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
 }).catch(() => {});
 // #endregion
 
-async function api(path, { method = "GET", body } = {}) {
+function genIdemKey(prefix = "req") {
+  const uid = (typeof crypto !== "undefined" && crypto.randomUUID && crypto.randomUUID()) || null;
+  if (uid) return `${prefix}-${uid}`;
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function api(path, { method = "GET", body, headers: extraHeaders, idempotencyKey } = {}) {
 const headers = { "X-User-Id": getUserId() };
 if (body !== undefined) headers["Content-Type"] = "application/json";
+if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+if (extraHeaders && typeof extraHeaders === "object") Object.assign(headers, extraHeaders);
 const resp = await fetch(path, {
   method,
   headers,
@@ -322,7 +330,32 @@ try {
     );
     bindNavButtons(app());
 
+    let publishInFlight = false;
+    let publishIdemKey = "";
+
+    function markDirty() {
+      // Any input change should start a new logical "create" attempt,
+      // so we must not reuse the previous idempotency key.
+      publishIdemKey = "";
+      if (publishInFlight) return;
+      const btn = $("publish");
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "发布";
+      }
+      const created = $("created");
+      if (created) created.innerHTML = "";
+    }
+
+    ["q", "mins", "opts", "isPublic"].forEach((id) => {
+      const el = $(id);
+      if (!el) return;
+      el.addEventListener("input", markDirty);
+      el.addEventListener("change", markDirty);
+    });
+
     $("publish").addEventListener("click", async () => {
+      if (publishInFlight) return;
       const q = $("q").value.trim();
       const mins = Number($("mins").value || "0");
       const rawLines = $("opts")
@@ -355,10 +388,21 @@ try {
       const isPublic = $("isPublic").checked;
 
       const exp = new Date(Date.now() + Math.max(1, mins) * 60 * 1000).toISOString();
+      const btn = $("publish");
+      const oldText = btn.textContent;
       try {
+        publishInFlight = true;
+        btn.disabled = true;
+        btn.textContent = "发布中...";
+
+        // Same key for rapid clicks / retries within this create action.
+        // Backend binds idem:{user}:{key} -> poll_id for 5 minutes.
+        if (!publishIdemKey) publishIdemKey = genIdemKey("create");
+
         const poll = await api("/polls/createPoll", {
           method: "POST",
           body: { question: q, options: opts, expires_at: exp, is_public: isPublic },
+          idempotencyKey: publishIdemKey,
         });
         const link = `${location.origin}/#/poll/${poll.id}`;
         console.log("created poll", poll);
@@ -372,9 +416,18 @@ try {
         $("copyLink").addEventListener("click", async () => {
           await navigator.clipboard.writeText(link);
         });
+
+        // After success we keep button disabled; any further input change will re-enable it
+        // and generate a fresh idempotency key for the new create attempt.
+        btn.textContent = "已发布";
       } catch (e) {
         console.error(e);
         showToast(e.message || "创建投票失败");
+        // allow retry with the same idempotency key (and restore UI state)
+        btn.disabled = false;
+        btn.textContent = oldText || "发布";
+      } finally {
+        publishInFlight = false;
       }
     });
     return;

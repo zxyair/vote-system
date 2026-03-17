@@ -16,6 +16,9 @@ helm upgrade --install "${RELEASE}" prometheus-community/kube-prometheus-stack \
   -n "${NAMESPACE}" \
   -f deployments/k8s/observability/kube-prometheus-stack-values.yaml
 
+echo "Applying app ServiceMonitors / redis-exporter / rules / dashboards..."
+kubectl apply -k deployments/k8s/observability
+
 echo ""
 echo "Grafana default credentials: admin / admin"
 echo "Port-forward (local): kubectl -n ${NAMESPACE} port-forward svc/${RELEASE}-grafana 3000:80"

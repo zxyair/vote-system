@@ -26,6 +26,9 @@ helm upgrade --install $Release prometheus-community/kube-prometheus-stack `
   -n $Namespace `
   -f deployments/k8s/observability/kube-prometheus-stack-values.yaml | Out-Host
 
+Write-Host "Applying app ServiceMonitors / redis-exporter / rules / dashboards..."
+kubectl apply -k deployments/k8s/observability | Out-Host
+
 Write-Host ""
 Write-Host "Grafana default credentials:"
 Write-Host "- user: admin"

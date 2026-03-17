@@ -1,0 +1,70 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: voting-alerts
+  namespace: voting
+  labels:
+    release: kube-prometheus-stack
+spec:
+  groups:
+    - name: voting.rules
+      rules:
+        - alert: VotingHttpHighErrorRate
+          expr: |
+            sum(rate(voting_httpserver_requests_total{code=~"5.."}[5m]))
+              /
+            sum(rate(voting_httpserver_requests_total[5m]))
+              > 0.01
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "httpserver 5xx error rate > 1%"
+            description: "httpserver 5xx error ratio is high (over 5m)."
+
+        - alert: VotingHttpHighLatencyP99
+          expr: |
+            histogram_quantile(
+              0.99,
+              sum by (le) (rate(voting_httpserver_request_duration_seconds_bucket[5m]))
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "httpserver p99 latency > 1s"
+            description: "High tail latency detected for httpserver."
+
+        - alert: VotingGrpcHighErrorRate
+          expr: |
+            sum(rate(voting_grpcserver_requests_total{code!=\"OK\"}[5m]))
+              /
+            sum(rate(voting_grpcserver_requests_total[5m]))
+              > 0.01
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "grpcserver non-OK error rate > 1%"
+            description: "grpcserver error ratio is high (over 5m)."
+
+        - alert: RedisMemoryHigh
+          expr: |
+            redis_memory_used_bytes / redis_memory_max_bytes > 0.85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Redis memory usage > 85%"
+            description: "Redis memory is approaching maxmemory."
+
+        - alert: KubernetesPodCrashLoopingVoting
+          expr: |
+            sum by (namespace, pod, container) (rate(kube_pod_container_status_restarts_total{namespace=\"voting\"}[10m])) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Pod restarting in voting namespace"
+            description: "A container in voting namespace is restarting."
+
