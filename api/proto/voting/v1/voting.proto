@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package voting.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "vote-system/internal/gen/voting/v1;votingv1";
+
+message Poll {
+  string id = 1;
+  string question = 2;
+  repeated string options = 3;
+  map<string, int64> votes = 4;
+  string created_by = 5;
+  string updated_by = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp expires_at = 8;
+  bool is_closed = 9;
+  bool is_public = 10;
+}
+
+message PollSummary {
+  string id = 1;
+  string question = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp expires_at = 4;
+  bool is_closed = 5;
+  string created_by = 6;
+}
+
+service VotingService {
+  rpc CreatePoll(CreatePollRequest) returns (CreatePollResponse);
+  rpc ClosePoll(ClosePollRequest) returns (ClosePollResponse);
+  rpc DeletePoll(DeletePollRequest) returns (DeletePollResponse);
+
+  rpc Vote(VoteRequest) returns (VoteResponse);
+  rpc UndoVote(UndoVoteRequest) returns (UndoVoteResponse);
+
+  rpc GetPoll(GetPollRequest) returns (GetPollResponse);
+  rpc SearchPolls(SearchPollsRequest) returns (SearchPollsResponse);
+  rpc GetPollStats(GetPollStatsRequest) returns (GetPollStatsResponse);
+
+  rpc ListPublicPolls(ListPublicPollsRequest) returns (ListPublicPollsResponse);
+  rpc ListPublicPollStats(ListPublicPollStatsRequest) returns (ListPublicPollStatsResponse);
+  rpc GetMyVotes(GetMyVotesRequest) returns (GetMyVotesResponse);
+  rpc ListMyCreatedPollStats(ListMyCreatedPollStatsRequest) returns (ListMyCreatedPollStatsResponse);
+}
+
+message CreatePollRequest {
+  string user_id = 1;
+  string idempotency_key = 2;
+  string question = 3;
+  repeated string options = 4;
+  google.protobuf.Timestamp expires_at = 5;
+  bool is_public = 6;
+}
+
+message CreatePollResponse {
+  Poll poll = 1;
+}
+
+message ClosePollRequest {
+  string user_id = 1;
+  string idempotency_key = 2;
+  string poll_id = 3;
+}
+
+message ClosePollResponse {
+  Poll poll = 1;
+}
+
+message DeletePollRequest {
+  string user_id = 1;
+  string idempotency_key = 2;
+  string poll_id = 3;
+}
+
+message DeletePollResponse {
+  bool deleted = 1;
+}
+
+message VoteRequest {
+  string user_id = 1;
+  string idempotency_key = 2;
+  string poll_id = 3;
+  string option = 4;
+}
+
+message VoteResponse {
+  Poll poll = 1;
+}
+
+message UndoVoteRequest {
+  string user_id = 1;
+  string idempotency_key = 2;
+  string poll_id = 3;
+}
+
+message UndoVoteResponse {
+  Poll poll = 1;
+}
+
+message SearchPollsRequest {
+  string created_by = 1;
+  bool include_closed = 2;
+  google.protobuf.Timestamp created_after = 3;
+  google.protobuf.Timestamp created_before = 4;
+  int32 limit = 5;
+  string cursor = 6;
+}
+
+message SearchPollsResponse {
+  repeated PollSummary polls = 1;
+  string next_cursor = 2;
+}
+
+message GetPollStatsRequest {
+  bool include_closed = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message GetPollStatsResponse {
+  repeated Poll polls = 1;
+  string next_cursor = 2;
+}
+
+message GetPollRequest {
+  string poll_id = 1;
+}
+
+message GetPollResponse {
+  Poll poll = 1;
+}
+
+message ListPublicPollsRequest {
+  bool include_closed = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message ListPublicPollsResponse {
+  repeated PollSummary polls = 1;
+  string next_cursor = 2;
+}
+
+message ListPublicPollStatsRequest {
+  bool include_closed = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message ListPublicPollStatsResponse {
+  repeated Poll polls = 1;
+  string next_cursor = 2;
+}
+
+message MyVote {
+  string poll_id = 1;
+  string option = 2;
+  Poll poll = 3;
+}
+
+message GetMyVotesRequest {
+  string user_id = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message GetMyVotesResponse {
+  repeated MyVote votes = 1;
+  string next_cursor = 2;
+}
+
+message ListMyCreatedPollStatsRequest {
+  string user_id = 1;
+  bool include_closed = 2;
+  int32 limit = 3;
+  string cursor = 4;
+}
+
+message ListMyCreatedPollStatsResponse {
+  repeated Poll polls = 1;
+  string next_cursor = 2;
+}
+
