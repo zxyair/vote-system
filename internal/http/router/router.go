@@ -9,6 +9,7 @@ import (
 	votingv1 "vote-system/internal/gen/voting/v1"
 	"vote-system/internal/http/handler"
 	"vote-system/internal/http/middleware"
+	"vote-system/internal/obs"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,6 +20,18 @@ func SetupRouter(client votingv1.VotingServiceClient) *gin.Engine {
 	r.Use(middleware.TokenBucket(200, 400, 20, 40))
 
 	r.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	// 监控端点
+	r.GET("/metrics", gin.WrapH(obs.PrometheusHandler()))
+	r.GET("/sse/stats", func(c *gin.Context) {
+		// SSE统计信息
+		c.JSON(http.StatusOK, gin.H{
+			"active_connections": obs.SSEActiveConnections,
+			"messages_sent":      obs.SSEMessagesSent,
+			"messages_dropped":   obs.SSEMessagesDropped,
+			"errors":            "Check metrics endpoint for error counts",
+		})
+	})
 
 	hub := handler.NewSSEHubForRouter()
 	h := handler.New(client, hub)
@@ -47,6 +60,7 @@ func SetupRouter(client votingv1.VotingServiceClient) *gin.Engine {
 		_, _ = io.Copy(c.Writer, f)
 	})
 
+	
 	api := r.Group("/")
 	api.Use(middleware.RequireUser())
 	{
