@@ -44,6 +44,8 @@ service VotingService {
   rpc ListPublicPollStats(ListPublicPollStatsRequest) returns (ListPublicPollStatsResponse);
   rpc GetMyVotes(GetMyVotesRequest) returns (GetMyVotesResponse);
   rpc ListMyCreatedPollStats(ListMyCreatedPollStatsRequest) returns (ListMyCreatedPollStatsResponse);
+
+  rpc Ping(PingRequest) returns (PingResponse);
 }
 
 message CreatePollRequest {
@@ -182,5 +184,12 @@ message ListMyCreatedPollStatsRequest {
 message ListMyCreatedPollStatsResponse {
   repeated Poll polls = 1;
   string next_cursor = 2;
+}
+
+message PingRequest {
+}
+
+message PingResponse {
+  string status = 1;
 }
 

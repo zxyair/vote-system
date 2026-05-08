@@ -5,9 +5,6 @@ import (
 	"log"
 	"net"
 	"os"
-	"os/signal"
-	"syscall"
-	"time"
 
 	votingv1 "vote-system/internal/gen/voting/v1"
 	grpcserver "vote-system/internal/grpc/server"
@@ -20,13 +17,14 @@ import (
 )
 
 func main() {
-	addr := getenv("GRPC_ADDR", ":9090")
+	grpcAddr := getenv("GRPC_ADDR", ":9090")
 	redisAddr := os.Getenv("REDIS_ADDR")
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 
-	lis, err := net.Listen("tcp", addr)
+	// 创建gRPC服务器
+	lis, err := net.Listen("tcp", grpcAddr)
 	if err != nil {
-		log.Fatalf("listen %s: %v", addr, err)
+		log.Fatalf("listen %s: %v", grpcAddr, err)
 	}
 
 	var store service.Store = memorystore.New()
@@ -45,31 +43,14 @@ func main() {
 	}
 	svc := service.New(store)
 
+	// 创建gRPC服务器
 	s := grpc.NewServer()
 	votingv1.RegisterVotingServiceServer(s, grpcserver.New(svc))
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	go func() {
-		log.Printf("gRPC server running %s", addr)
-		if err := s.Serve(lis); err != nil {
-			log.Printf("grpc serve error: %v", err)
-		}
-	}()
-
-	<-ctx.Done()
-	log.Println("shutting down gRPC server")
-	stopped := make(chan struct{})
-	go func() {
-		s.GracefulStop()
-		close(stopped)
-	}()
-
-	select {
-	case <-stopped:
-	case <-time.After(5 * time.Second):
-		s.Stop()
+	// 启动gRPC服务器
+	log.Printf("gRPC server running %s", grpcAddr)
+	if err := s.Serve(lis); err != nil {
+		log.Printf("grpc serve error: %v", err)
 	}
 }
 

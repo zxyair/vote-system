@@ -503,8 +503,13 @@ try {
       // #endregion
 
       loadInFlight = (async () => {
+        console.log(`[DEBUG] 开始加载投票数据 - PollID: ${pollId}`);
         const p = normalizePoll(await api(`/polls/${encodeURIComponent(pollId)}`));
+        console.log(`[DEBUG] 获取到投票数据 - PollID: ${pollId}`, p);
       const votes = p.votes || {};
+        console.log(`[DEBUG] 投票票数数据 - PollID: ${pollId}`, votes);
+        const totalVotes = Object.values(votes).reduce((sum, count) => sum + (count || 0), 0);
+        console.log(`[DEBUG] 总票数统计 - PollID: ${pollId}, Total: ${totalVotes}`);
       const root = $("pollView");
       const createdAt = parseProtoTimestamp(p.createdAt);
       const expiresAt = parseProtoTimestamp(p.expiresAt);
@@ -547,16 +552,42 @@ try {
       root.querySelectorAll("[data-vote]").forEach((b) => {
         b.addEventListener("click", async () => {
           const opt = b.getAttribute("data-vote");
+          const originalText = b.textContent;
+
+          // 禁用按钮防止重复投票
+          b.disabled = true;
+          b.textContent = "投票中...";
+
           try {
-            await api(`/votes/${encodeURIComponent(pollId)}/vote`, {
+            console.log("开始投票", pollId, opt);
+
+            // 发起投票请求
+            const response = await api(`/votes/${encodeURIComponent(pollId)}/vote`, {
               method: "POST",
               body: { option: opt },
             });
+
+            console.log("投票响应", response);
+
+            // 立即更新页面，不等待SSE
             await load();
+
+            // 显示成功消息
             showToast("投票成功", "success");
+
+            console.log("投票页面已更新");
           } catch (e) {
-            console.error(e);
+            console.error("投票失败", e);
             showToast(e.message || "投票失败");
+
+            // 恢复按钮状态
+            b.disabled = false;
+            b.textContent = originalText;
+          } finally {
+            // 无论成功失败，都恢复按钮状态（成功后按钮已被禁用）
+            if (!b.disabled) {
+              b.textContent = originalText;
+            }
           }
         });
       });
@@ -596,83 +627,167 @@ try {
       return loadInFlight;
     }
 
-    try {
-      const es = new EventSource(`/events/polls/${encodeURIComponent(pollId)}?user_id=${encodeURIComponent(uid || "")}`);
-      window.__pollSSE = es;
-      es.onopen = () => {
-        pollSseStatus.textContent = "SSE: connected";
-        // #region agent log
-        fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
-          body: JSON.stringify({
-            sessionId: "cd7378",
-            runId: "sse-verify",
-            hypothesisId: "H_SSE",
-            location: "web/static/app.js:poll_sse",
-            message: "poll_sse_open",
-            data: { pollId, uid, url: `/events/polls/${pollId}?user_id=${uid || ""}` },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-      };
-      es.onerror = () => {
-        pollSseStatus.textContent = "SSE: reconnecting";
-        // #region agent log
-        fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
-          body: JSON.stringify({
-            sessionId: "cd7378",
-            runId: "sse-verify",
-            hypothesisId: "H_SSE",
-            location: "web/static/app.js:poll_sse",
-            message: "poll_sse_error",
-            data: { pollId, uid },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-      };
-      es.addEventListener("poll_invalidate", async (evt) => {
-        // #region agent log
-        fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
-          body: JSON.stringify({
-            sessionId: "cd7378",
-            runId: "post-sse",
-            hypothesisId: "SSE_POLL",
-            location: "web/static/app.js:poll_sse",
-            message: "poll_invalidate_received",
-            data: { pollId, data: evt && evt.data ? String(evt.data).slice(0, 200) : "" },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
+    // SSE连接管理器
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    let reconnectTimeout = null;
 
-        try {
-          await load();
-        } catch (e) {
-          console.error("poll SSE refresh failed", e);
+    function connectSSE() {
+      try {
+        // 关闭旧连接
+        if (window.__pollSSE) {
+          window.__pollSSE.close();
+          window.__pollSSE = null;
         }
-      });
-    } catch (e) {
-      console.error(e);
-      pollSseStatus.textContent = "SSE: unavailable";
+
+        const es = new EventSource(`/events/polls/${encodeURIComponent(pollId)}?user_id=${encodeURIComponent(uid || "")}`);
+        window.__pollSSE = es;
+
+        es.onopen = () => {
+          console.log("SSE连接已建立", pollId);
+          pollSseStatus.textContent = "SSE: connected";
+          pollSseStatus.style.color = "green";
+          reconnectAttempts = 0; // 重置重试计数
+          // #region agent log
+          fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
+            body: JSON.stringify({
+              sessionId: "cd7378",
+              runId: "sse-verify",
+              hypothesisId: "H_SSE",
+              location: "web/static/app.js:poll_sse",
+              message: "poll_sse_open",
+              data: { pollId, uid, url: `/events/polls/${pollId}?user_id=${uid || ""}` },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
+        };
+
+        es.onerror = () => {
+          console.log("SSE连接错误，准备重连", pollId);
+          pollSseStatus.textContent = "SSE: reconnecting";
+          pollSseStatus.style.color = "orange";
+
+          // 关闭错误连接
+          es.close();
+          window.__pollSSE = null;
+
+          // 清理之前的重连定时器
+          if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+          }
+
+          // 尝试重连
+          if (reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000); // 指数退避，最大30秒
+            console.log(`SSE重试第${reconnectAttempts}次，${delay}ms后重连`);
+
+            reconnectTimeout = setTimeout(() => {
+              connectSSE();
+            }, delay);
+          } else {
+            pollSseStatus.textContent = "SSE: failed";
+            pollSseStatus.style.color = "red";
+            console.error("SSE重连失败次数过多，放弃重连");
+          }
+        };
+
+        es.addEventListener("poll_invalidate", async (evt) => {
+          console.log("收到SSE更新事件", pollId, evt.data);
+          // #region agent log
+          fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
+            body: JSON.stringify({
+              sessionId: "cd7378",
+              runId: "post-sse",
+              hypothesisId: "SSE_POLL",
+              location: "web/static/app.js:poll_sse",
+              message: "poll_invalidate_received",
+              data: { pollId, data: evt && evt.data ? String(evt.data).slice(0, 200) : "" },
+              timestamp: Date.now(),
+            }),
+          }).catch(() => {});
+          // #endregion
+
+          try {
+            console.log(`[DEBUG] 准备通过SSE更新数据 - PollID: ${pollId}`);
+
+            // 添加短暂延迟确保服务器数据已更新
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            // 设置超时
+            await Promise.race([
+              load(),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("加载超时")), 5000)
+              )
+            ]);
+
+            console.log(`[DEBUG] SSE更新完成 - PollID: ${pollId}`);
+          } catch (e) {
+            console.error("poll SSE刷新失败", e);
+            showToast("实时更新失败，请手动刷新", "error");
+          }
+        });
+
+        // 添加连接关闭处理
+        es.addEventListener("close", () => {
+          console.log("SSE连接已关闭", pollId);
+          pollSseStatus.textContent = "SSE: disconnected";
+          pollSseStatus.style.color = "gray";
+        });
+
+      } catch (e) {
+        console.error("SSE连接初始化失败", e);
+        pollSseStatus.textContent = "SSE: unavailable";
+        pollSseStatus.style.color = "red";
+      }
     }
 
+    // 建立连接
+    connectSSE();
+
     $("refreshPoll").addEventListener("click", () => load().catch((e) => showToast(e.message || "刷新投票详情失败")));
-    $("undo").addEventListener("click", async () => {
-      try {
-        await api(`/votes/${encodeURIComponent(pollId)}/vote`, { method: "DELETE" });
-        await load();
-      } catch (e) {
-        console.error(e);
-        showToast(e.message || "撤销投票失败");
-      }
-    });
+    const undoBtn = $("undo");
+    if (undoBtn) {
+      undoBtn.addEventListener("click", async () => {
+        const originalText = undoBtn.textContent;
+
+        // 禁用按钮防止重复操作
+        undoBtn.disabled = true;
+        undoBtn.textContent = "撤销中...";
+
+        try {
+          console.log("开始撤销投票", pollId);
+
+          // 发起撤销投票请求
+          await api(`/votes/${encodeURIComponent(pollId)}/vote`, { method: "DELETE" });
+
+          // 立即更新页面，不等待SSE
+          await load();
+
+          // 显示成功消息
+          showToast("撤销成功", "success");
+
+          console.log("撤销投票页面已更新");
+        } catch (e) {
+          console.error("撤销投票失败", e);
+          showToast(e.message || "撤销投票失败");
+
+          // 恢复按钮状态
+          undoBtn.disabled = false;
+          undoBtn.textContent = originalText;
+        } finally {
+          // 恢复按钮状态
+          undoBtn.disabled = false;
+          undoBtn.textContent = originalText;
+        }
+      });
+    }
 
     load().catch((e) => showToast(e.message || "加载投票详情失败"));
     return;
@@ -686,7 +801,7 @@ try {
         <section class="card">
           <div class="row">
             <button id="refreshAll">刷新</button>
-            <span id="sseStatus" class="badge">SSE: connecting</span>
+            <span id="statusEl" class="badge">SSE: connecting</span>
           </div>
           <h3>我创建的投票</h3>
           <div id="myCreated" class="polls"></div>
@@ -735,9 +850,18 @@ try {
     let currentPayload = { myVotes: null, publicStats: null, myCreated: null };
 
     function renderResults(payload) {
+      console.log("[DEBUG] 开始渲染结果页面", payload);
+
+      if (!payload) {
+        console.error("[DEBUG] renderResults: payload is null");
+        return;
+      }
+
       const mv = payload?.myVotes;
       const ps = payload?.publicStats;
       const mc = payload?.myCreated;
+
+      console.log("[DEBUG] 解构后的数据:", { mv, ps, mc });
 
       // Dedup + priority:
       // 1) 我创建的投票
@@ -862,57 +986,165 @@ try {
     }
 
     async function loadAllOnce() {
-      const mv = await api("/users/me/votes");
-      const ps = await api("/polls/public/stats?include_closed=true");
-      const mc = await api(`/polls/my_created/stats?include_closed=true`);
-      currentPayload = { myVotes: mv, publicStats: ps, myCreated: mc };
-      renderResults(currentPayload);
+      try {
+        console.log("[DEBUG] 开始加载所有结果数据");
+        const mv = await api("/users/me/votes");
+        console.log("[DEBUG] 获取到我的投票数据", mv);
+
+        const ps = await api("/polls/public/stats?include_closed=true");
+        console.log("[DEBUG] 获取到公共统计数据", ps);
+
+        const mc = await api(`/polls/my_created/stats?include_closed=true`);
+        console.log("[DEBUG] 获取到我的创建数据", mc);
+
+        currentPayload = { myVotes: mv, publicStats: ps, myCreated: mc };
+        renderResults(currentPayload);
+        console.log("[DEBUG] 结果页面数据加载完成");
+      } catch (e) {
+        console.error("[DEBUG] 加载结果数据失败", e);
+        showToast("加载数据失败，请刷新页面", "error");
+      }
     }
 
-      // SSE: incremental invalidation updates
-    if (window.__resultsSSE) {
-      window.__resultsSSE.close();
-      window.__resultsSSE = null;
-    }
-    const statusEl = $("sseStatus");
-    try {
-      const es = new EventSource(`/events/results?user_id=${encodeURIComponent(uid || "")}`);
-      window.__resultsSSE = es;
-      es.onopen = () => {
-        statusEl.textContent = "SSE: connected";
-      };
-      es.onerror = () => {
-        statusEl.textContent = "SSE: reconnecting";
-      };
+    // 结果页面SSE连接管理器
+    let resultsReconnectAttempts = 0;
+    const maxResultsReconnectAttempts = 5;
+    let resultsReconnectTimeout = null;
+
+    function connectResultsSSE() {
+      // 关闭旧连接
+      if (window.__resultsSSE) {
+        window.__resultsSSE.close();
+        window.__resultsSSE = null;
+      }
+
+      try {
+        const es = new EventSource(`/events/results?user_id=${encodeURIComponent(uid || "")}`);
+        window.__resultsSSE = es;
+
+        es.onopen = () => {
+          console.log("结果页面SSE连接已建立");
+          statusEl.textContent = "SSE: connected";
+          statusEl.style.color = "green";
+          resultsReconnectAttempts = 0; // 重置重试计数
+        };
+
+        es.onerror = () => {
+          console.log("结果页面SSE连接错误，准备重连");
+          statusEl.textContent = "SSE: reconnecting";
+          statusEl.style.color = "orange";
+
+          // 关闭错误连接
+          es.close();
+          window.__resultsSSE = null;
+
+          // 清理之前的重连定时器
+          if (resultsReconnectTimeout) {
+            clearTimeout(resultsReconnectTimeout);
+          }
+
+          // 尝试重连
+          if (resultsReconnectAttempts < maxResultsReconnectAttempts) {
+            resultsReconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, resultsReconnectAttempts - 1), 30000); // 指数退避，最大30秒
+            console.log(`结果页面SSE重试第${resultsReconnectAttempts}次，${delay}ms后重连`);
+
+            resultsReconnectTimeout = setTimeout(() => {
+              connectResultsSSE();
+            }, delay);
+          } else {
+            statusEl.textContent = "SSE: failed";
+            statusEl.style.color = "red";
+            console.error("结果页面SSE重连失败次数过多，放弃重连");
+          }
+        };
+
         es.addEventListener("invalidate", async (evt) => {
+          console.log("收到结果页面SSE更新事件", evt.data);
+
           let inv = null;
           try {
             inv = JSON.parse(evt.data);
           } catch {
             inv = null;
           }
+
           try {
+            console.log(`[DEBUG] 准备通过SSE更新结果页面`);
+            console.log(`[DEBUG] 更新触发数据:`, inv);
+
+            // 添加短暂延迟确保服务器数据已更新
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             // If server doesn't specify, refresh all.
             const needMyVotes = inv?.myVotes ?? true;
             const needPublicStats = inv?.publicStats ?? true;
             const needMyCreated = inv?.myCreated ?? true;
 
+            console.log(`[DEBUG] 需要更新的数据:`, { needMyVotes, needPublicStats, needMyCreated });
+
             const nextPayload = { ...currentPayload };
             const tasks = [];
-            if (needMyVotes) tasks.push(api("/users/me/votes").then((v) => (nextPayload.myVotes = v)));
-            if (needPublicStats) tasks.push(api("/polls/public/stats?include_closed=true").then((v) => (nextPayload.publicStats = v)));
-            if (needMyCreated) tasks.push(api("/polls/my_created/stats?include_closed=true").then((v) => (nextPayload.myCreated = v)));
-            await Promise.all(tasks);
+
+            if (needMyVotes) {
+              tasks.push(api("/users/me/votes").then((v) => {
+                console.log("[DEBUG] 我的投票数据已更新:", v);
+                nextPayload.myVotes = v;
+              }));
+            }
+            if (needPublicStats) {
+              tasks.push(api("/polls/public/stats?include_closed=true").then((v) => {
+                console.log("[DEBUG] 公共统计数据已更新:", v);
+                nextPayload.publicStats = v;
+              }));
+            }
+            if (needMyCreated) {
+              tasks.push(api("/polls/my_created/stats?include_closed=true").then((v) => {
+                console.log("[DEBUG] 我的创建数据已更新:", v);
+                nextPayload.myCreated = v;
+              }));
+            }
+
+            // 设置超时
+            await Promise.race([
+              Promise.all(tasks),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("数据加载超时")), 10000)
+              )
+            ]);
+
             currentPayload = nextPayload;
+            console.log("[DEBUG] 准备渲染结果页面");
             renderResults(currentPayload);
+            console.log("结果页面数据已更新");
           } catch (e) {
-            console.error("invalidate refresh failed", e);
+            console.error("结果页面SSE刷新失败", e);
+            console.error("错误详情:", {
+                error: e,
+                eventData: evt.data,
+                inv: inv,
+                timestamp: new Date().toISOString()
+            });
+            showToast("实时更新失败，请手动刷新", "error");
           }
         });
-    } catch (e) {
-      console.error(e);
-      statusEl.textContent = "SSE: unavailable";
+
+        // 添加连接关闭处理
+        es.addEventListener("close", () => {
+          console.log("结果页面SSE连接已关闭");
+          statusEl.textContent = "SSE: disconnected";
+          statusEl.style.color = "gray";
+        });
+
+      } catch (e) {
+        console.error("结果页面SSE连接初始化失败", e);
+        statusEl.textContent = "SSE: unavailable";
+        statusEl.style.color = "red";
+      }
     }
+
+    // 建立连接
+    connectResultsSSE();
 
     $("refreshAll").addEventListener("click", () => loadAllOnce().catch((e) => showToast(e.message || "刷新结果失败")));
     loadAllOnce().catch((e) => showToast(e.message || "加载结果失败"));

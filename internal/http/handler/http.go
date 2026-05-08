@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -39,6 +40,7 @@ type createPollBody struct {
 	ExpiresAt string   `json:"expires_at"` // RFC3339
 	IsPublic  bool     `json:"is_public"`
 }
+
 
 func (h *HTTP) CreatePoll(c *gin.Context) {
 	var body createPollBody
@@ -177,22 +179,40 @@ func (h *HTTP) Vote(c *gin.Context) {
 		return
 	}
 	if h.hub != nil && resp.Poll != nil {
-		h.notifyPollInvalidate(resp.Poll.GetId(), "vote")
+		pollID := resp.Poll.GetId()
+		userID := middleware.UserID(c)
+		fmt.Printf("[DEBUG] 投票成功，发送SSE通知 - PollID: %s, User: %s\n", pollID, userID)
+
+		// 通知特定投票的连接
+		h.notifyPollInvalidate(pollID, "vote")
+		fmt.Printf("[DEBUG] 已发送poll_invalidate通知 - PollID: %s, Reason: vote\n", pollID)
+
 		// voter
 		if msg, err := json.Marshal(invalidateMsg{MyVotes: true}); err == nil {
-			h.hub.notifyUser(middleware.UserID(c), msg)
+			fmt.Printf("[DEBUG] 发送用户投票更新通知 - User: %s\n", userID)
+			h.hub.notifyUser(userID, msg)
 		}
+
 		// creator's created list stats
-		if msg, err := json.Marshal(invalidateMsg{MyCreated: true}); err == nil {
-			h.hub.notifyUser(resp.Poll.GetCreatedBy(), msg)
-		}
-		// public stats if public poll
-		if resp.Poll.GetIsPublic() {
-			if msg, err := json.Marshal(invalidateMsg{PublicStats: true}); err == nil {
-				h.hub.broadcast(msg)
+		if creatorID := resp.Poll.GetCreatedBy(); creatorID != "" {
+			if msg, err := json.Marshal(invalidateMsg{MyCreated: true}); err == nil {
+				fmt.Printf("[DEBUG] 发送创建者统计更新通知 - Creator: %s\n", creatorID)
+				h.hub.notifyUser(creatorID, msg)
 			}
 		}
-	}
+
+			// public stats (always update for the voting user)
+			if msg, err := json.Marshal(invalidateMsg{PublicStats: true}); err == nil {
+				fmt.Printf("[DEBUG] 发送公共统计更新通知
+")
+				if resp.Poll.GetIsPublic() {
+					// 公开投票，广播给所有人
+					h.hub.broadcast(msg)
+				} else {
+					// 非公开投票，只通知投票用户
+					h.hub.notifyUser(userID, msg)
+				}
+			}
 	c.JSON(http.StatusOK, resp.Poll)
 }
 
@@ -216,11 +236,15 @@ func (h *HTTP) UndoVote(c *gin.Context) {
 		if msg, err := json.Marshal(invalidateMsg{MyCreated: true}); err == nil {
 			h.hub.notifyUser(resp.Poll.GetCreatedBy(), msg)
 		}
-		if resp.Poll.GetIsPublic() {
 			if msg, err := json.Marshal(invalidateMsg{PublicStats: true}); err == nil {
-				h.hub.broadcast(msg)
+				if resp.Poll.GetIsPublic() {
+					// 公开投票，广播给所有人
+					h.hub.broadcast(msg)
+				} else {
+					// 非公开投票，只通知投票用户
+					h.hub.notifyUser(middleware.UserID(c), msg)
+				}
 			}
-		}
 	}
 	c.JSON(http.StatusOK, resp.Poll)
 }
@@ -242,6 +266,7 @@ func (h *HTTP) SearchPolls(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+
 func (h *HTTP) GetPollStats(c *gin.Context) {
 	includeClosed := c.Query("include_closed") == "true"
 	resp, err := h.Client.GetPollStats(c.Request.Context(), &votingv1.GetPollStatsRequest{
@@ -255,6 +280,7 @@ func (h *HTTP) GetPollStats(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, resp)
 }
+
 
 func (h *HTTP) ListPublicPolls(c *gin.Context) {
 	includeClosed := c.Query("include_closed") == "true"
@@ -270,6 +296,7 @@ func (h *HTTP) ListPublicPolls(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+
 func (h *HTTP) ListPublicPollStats(c *gin.Context) {
 	includeClosed := c.Query("include_closed") == "true"
 	resp, err := h.Client.ListPublicPollStats(c.Request.Context(), &votingv1.ListPublicPollStatsRequest{
@@ -284,6 +311,7 @@ func (h *HTTP) ListPublicPollStats(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
+
 func (h *HTTP) GetMyVotes(c *gin.Context) {
 	resp, err := h.Client.GetMyVotes(c.Request.Context(), &votingv1.GetMyVotesRequest{
 		UserId: middleware.UserID(c),
@@ -296,6 +324,7 @@ func (h *HTTP) GetMyVotes(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, resp)
 }
+
 
 func (h *HTTP) ListMyCreatedPollStats(c *gin.Context) {
 	includeClosed := c.Query("include_closed") == "true"
@@ -319,3 +348,4 @@ func (h *HTTP) ListMyCreatedPollStats(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, resp)
 }
+

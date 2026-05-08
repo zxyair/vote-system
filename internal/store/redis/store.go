@@ -21,6 +21,11 @@ func New(rdb *goredis.Client) *Store {
 	return &Store{rdb: rdb}
 }
 
+// Redis 返回Redis客户端
+func (s *Store) Redis() *goredis.Client {
+	return s.rdb
+}
+
 func (s *Store) CreatePoll(ctx context.Context, p service.Poll) (service.Poll, error) {
 	pipe := s.rdb.TxPipeline()
 
@@ -145,6 +150,8 @@ func (s *Store) GetPoll(ctx context.Context, pollID string) (service.Poll, error
 }
 
 func (s *Store) Vote(ctx context.Context, pollID, userID, option, idempotencyKey string) (service.Poll, error) {
+	// 直接执行投票脚本，不使用事务管道，避免数据不一致
+	fmt.Printf("[DEBUG] 执行投票脚本 - PollID: %s, User: %s, Option: %s\n", pollID, userID, option)
 	res, err := voteScript.Run(ctx, s.rdb, []string{
 		pollMetaKey(pollID),
 		pollVotesKey(pollID),
@@ -153,11 +160,19 @@ func (s *Store) Vote(ctx context.Context, pollID, userID, option, idempotencyKey
 		idemKey(userID, idempotencyKey),
 	}, pollID, userID, option, idempotencyKey).Int64()
 	if err != nil {
+		fmt.Printf("[DEBUG] 投票脚本执行失败 - PollID: %s, Error: %v\n", pollID, err)
 		return service.Poll{}, err
 	}
-	switch res {
-	case voteOK, voteNoop:
+	fmt.Printf("[DEBUG] 投票脚本执行结果 - PollID: %s, Result: %d\n", pollID, res)
+
+	// 如果投票成功，获取最新数据
+	if res == voteOK || res == voteNoop {
+		// 使用 getPoll 方法获取最新的投票数据
 		return s.getPoll(ctx, pollID)
+	}
+
+	// 处理其他错误情况
+	switch res {
 	case voteNotFound:
 		return service.Poll{}, service.ErrNotFound
 	case voteForbidden:
@@ -172,6 +187,7 @@ func (s *Store) Vote(ctx context.Context, pollID, userID, option, idempotencyKey
 }
 
 func (s *Store) UndoVote(ctx context.Context, pollID, userID, idempotencyKey string) (service.Poll, error) {
+	// 直接执行撤销投票脚本，不使用事务管道
 	res, err := undoScript.Run(ctx, s.rdb, []string{
 		pollMetaKey(pollID),
 		pollVotesKey(pollID),
@@ -182,9 +198,15 @@ func (s *Store) UndoVote(ctx context.Context, pollID, userID, idempotencyKey str
 	if err != nil {
 		return service.Poll{}, err
 	}
-	switch res {
-	case undoOK, undoNoop:
+
+	// 如果撤销成功，获取最新数据
+	if res == undoOK || res == undoNoop {
+		// 使用 getPoll 方法获取最新的投票数据
 		return s.getPoll(ctx, pollID)
+	}
+
+	// 处理其他错误情况
+	switch res {
 	case undoNotFound:
 		return service.Poll{}, service.ErrNotFound
 	case undoForbidden:
@@ -429,8 +451,14 @@ func (s *Store) getPoll(ctx context.Context, pollID string) (service.Poll, error
 	if len(m) == 0 {
 		return service.Poll{}, service.ErrNotFound
 	}
-	createdAt, _ := strconv.ParseInt(m["created_at"], 10, 64)
-	expiresAt, _ := strconv.ParseInt(m["expires_at"], 10, 64)
+	createdAt, err := strconv.ParseInt(m["created_at"], 10, 64)
+	if err != nil {
+		return service.Poll{}, fmt.Errorf("invalid created_at: %v", err)
+	}
+	expiresAt, err := strconv.ParseInt(m["expires_at"], 10, 64)
+	if err != nil {
+		return service.Poll{}, fmt.Errorf("invalid expires_at: %v", err)
+	}
 
 	optsMap, err := s.rdb.HGetAll(ctx, pollOptionsKey(pollID)).Result()
 	if err != nil {
@@ -450,8 +478,17 @@ func (s *Store) getPoll(ctx context.Context, pollID string) (service.Poll, error
 	}
 	votes := make(map[string]int64, len(votesStr))
 	for k, sv := range votesStr {
-		n, _ := strconv.ParseInt(sv, 10, 64)
-		votes[k] = n
+		if sv != "" { // 确保值不为空
+			n, err := strconv.ParseInt(sv, 10, 64)
+			if err == nil {
+				votes[k] = n
+			} else {
+				// 如果解析失败，设置为0
+				votes[k] = 0
+			}
+		} else {
+			votes[k] = 0
+		}
 	}
 
 	p := service.Poll{

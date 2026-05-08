@@ -31,6 +31,7 @@ const (
 	VotingService_ListPublicPollStats_FullMethodName    = "/voting.v1.VotingService/ListPublicPollStats"
 	VotingService_GetMyVotes_FullMethodName             = "/voting.v1.VotingService/GetMyVotes"
 	VotingService_ListMyCreatedPollStats_FullMethodName = "/voting.v1.VotingService/ListMyCreatedPollStats"
+	VotingService_Ping_FullMethodName                   = "/voting.v1.VotingService/Ping"
 )
 
 // VotingServiceClient is the client API for VotingService service.
@@ -49,6 +50,7 @@ type VotingServiceClient interface {
 	ListPublicPollStats(ctx context.Context, in *ListPublicPollStatsRequest, opts ...grpc.CallOption) (*ListPublicPollStatsResponse, error)
 	GetMyVotes(ctx context.Context, in *GetMyVotesRequest, opts ...grpc.CallOption) (*GetMyVotesResponse, error)
 	ListMyCreatedPollStats(ctx context.Context, in *ListMyCreatedPollStatsRequest, opts ...grpc.CallOption) (*ListMyCreatedPollStatsResponse, error)
+	Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error)
 }
 
 type votingServiceClient struct {
@@ -179,6 +181,16 @@ func (c *votingServiceClient) ListMyCreatedPollStats(ctx context.Context, in *Li
 	return out, nil
 }
 
+func (c *votingServiceClient) Ping(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (*PingResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(PingResponse)
+	err := c.cc.Invoke(ctx, VotingService_Ping_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // VotingServiceServer is the server API for VotingService service.
 // All implementations must embed UnimplementedVotingServiceServer
 // for forward compatibility.
@@ -195,6 +207,7 @@ type VotingServiceServer interface {
 	ListPublicPollStats(context.Context, *ListPublicPollStatsRequest) (*ListPublicPollStatsResponse, error)
 	GetMyVotes(context.Context, *GetMyVotesRequest) (*GetMyVotesResponse, error)
 	ListMyCreatedPollStats(context.Context, *ListMyCreatedPollStatsRequest) (*ListMyCreatedPollStatsResponse, error)
+	Ping(context.Context, *PingRequest) (*PingResponse, error)
 	mustEmbedUnimplementedVotingServiceServer()
 }
 
@@ -240,6 +253,9 @@ func (UnimplementedVotingServiceServer) GetMyVotes(context.Context, *GetMyVotesR
 }
 func (UnimplementedVotingServiceServer) ListMyCreatedPollStats(context.Context, *ListMyCreatedPollStatsRequest) (*ListMyCreatedPollStatsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListMyCreatedPollStats not implemented")
+}
+func (UnimplementedVotingServiceServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Ping not implemented")
 }
 func (UnimplementedVotingServiceServer) mustEmbedUnimplementedVotingServiceServer() {}
 func (UnimplementedVotingServiceServer) testEmbeddedByValue()                       {}
@@ -478,6 +494,24 @@ func _VotingService_ListMyCreatedPollStats_Handler(srv interface{}, ctx context.
 	return interceptor(ctx, in, info, handler)
 }
 
+func _VotingService_Ping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(VotingServiceServer).Ping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: VotingService_Ping_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(VotingServiceServer).Ping(ctx, req.(*PingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // VotingService_ServiceDesc is the grpc.ServiceDesc for VotingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -532,6 +566,10 @@ var VotingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListMyCreatedPollStats",
 			Handler:    _VotingService_ListMyCreatedPollStats_Handler,
+		},
+		{
+			MethodName: "Ping",
+			Handler:    _VotingService_Ping_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -22,14 +22,14 @@ func SetupRouter(client votingv1.VotingServiceClient) *gin.Engine {
 	r.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	// 监控端点
-	r.GET("/metrics", gin.WrapH(obs.PrometheusHandler()))
+	// r.GET("/metrics", gin.WrapH(obs.PrometheusHandler()))
 	r.GET("/sse/stats", func(c *gin.Context) {
 		// SSE统计信息
 		c.JSON(http.StatusOK, gin.H{
 			"active_connections": obs.SSEActiveConnections,
 			"messages_sent":      obs.SSEMessagesSent,
 			"messages_dropped":   obs.SSEMessagesDropped,
-			"errors":            "Check metrics endpoint for error counts",
+			"errors":             "Check metrics endpoint for error counts",
 		})
 	})
 
@@ -60,7 +60,6 @@ func SetupRouter(client votingv1.VotingServiceClient) *gin.Engine {
 		_, _ = io.Copy(c.Writer, f)
 	})
 
-	
 	api := r.Group("/")
 	api.Use(middleware.RequireUser())
 	{

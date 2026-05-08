@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results SSE 前端测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .event {
+            margin: 5px 0;
+            padding: 5px;
+            border-left: 3px solid #007bff;
+            background: #e3f2fd;
+        }
+        .error {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status.connecting {
+            background: #fff3cd;
+            color: #856404;
+        }
+        button {
+            padding: 8px 16px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Results SSE 前端测试</h2>
+        <p>此页面用于测试 http://localhost:8080/#/results 的SSE实时更新功能</p>
+
+        <div>
+            <span>当前状态: </span>
+            <span id="sseStatus" class="status connecting">连接中...</span>
+        </div>
+
+        <div>
+            <button id="testCreate">创建测试投票</button>
+            <button id="testVote">执行测试投票</button>
+            <button id="clearLog">清空日志</button>
+        </div>
+
+        <div>
+            <h3>更新事件日志:</h3>
+            <div id="eventLog" class="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // 测试用户ID
+        const testUserID = 'frontend_test_' + Date.now();
+        let sseConnection = null;
+        let eventCount = 0;
+
+        // 显示事件日志
+        function logEvent(message, type = 'info') {
+            const log = document.getElementById('eventLog');
+            const event = document.createElement('div');
+            event.className = `event ${type}`;
+
+            const timestamp = new Date().toLocaleTimeString();
+            event.innerHTML = `<strong>[${timestamp}]</strong> ${message}`;
+
+            log.insertBefore(event, log.firstChild);
+
+            // 保持最多100条记录
+            while (log.children.length > 100) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // 更新SSE状态
+        function updateSSEStatus(status, text) {
+            const statusEl = document.getElementById('sseStatus');
+            statusEl.textContent = text;
+            statusEl.className = `status ${status}`;
+        }
+
+        // 连接到SSE
+        function connectSSE() {
+            logEvent('正在连接到results SSE...', 'info');
+            updateSSEStatus('connecting', '连接中...');
+
+            // 如果已有连接，先关闭
+            if (sseConnection) {
+                sseConnection.close();
+            }
+
+            try {
+                sseConnection = new EventSource(`/events/results?user_id=${encodeURIComponent(testUserID)}`);
+
+                sseConnection.onopen = () => {
+                    logEvent('SSE连接已建立', 'success');
+                    updateSSEStatus('connected', '已连接');
+                };
+
+                sseConnection.onerror = (error) => {
+                    logEvent('SSE连接错误: ' + error.toString(), 'error');
+                    updateSSEStatus('disconnected', '连接断开');
+
+                    // 尝试重连
+                    setTimeout(() => {
+                        logEvent('尝试重新连接...', 'info');
+                        connectSSE();
+                    }, 3000);
+                };
+
+                sseConnection.addEventListener('invalidate', (event) => {
+                    eventCount++;
+                    const data = JSON.parse(event.data);
+
+                    logEvent(`收到SSE更新 #${eventCount}: ${JSON.stringify(data)}`, 'success');
+
+                    // 检查数据完整性
+                    if (data.myVotes !== undefined || data.publicStats !== undefined || data.myCreated !== undefined) {
+                        logEvent('✅ 数据格式正确', 'success');
+                    } else {
+                        logEvent('❌ 数据格式异常', 'error');
+                    }
+                });
+
+                // 处理其他事件类型
+                sseConnection.addEventListener('message', (event) => {
+                    if (event.data === ': ping') {
+                        // ping消息
+                        return;
+                    }
+                    logEvent('收到原始消息: ' + event.data, 'info');
+                });
+
+            } catch (error) {
+                logEvent('SSE连接失败: ' + error.message, 'error');
+                updateSSEStatus('disconnected', '连接失败');
+            }
+        }
+
+        // 创建测试投票
+        async function createTestPoll() {
+            logEvent('正在创建测试投票...', 'info');
+
+            try {
+                const response = await fetch('/polls/createPoll', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': testUserID
+                    },
+                    body: JSON.stringify({
+                        question: '前端测试问题',
+                        options: ['选项1', '选项2', '选项3'],
+                        expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+                        is_public: true
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    logEvent(`✅ 创建投票成功: ${result.id}`, 'success');
+                    return result.id;
+                } else {
+                    logEvent(`❌ 创建投票失败: ${result.error}`, 'error');
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                logEvent(`❌ 创建投票异常: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        // 执行测试投票
+        async function executeTestVote(pollID) {
+            logEvent(`正在对投票 ${pollID} 进行投票...`, 'info');
+
+            try {
+                const response = await fetch(`/votes/${encodeURIComponent(pollID)}/vote`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-User-Id': testUserID
+                    },
+                    body: JSON.stringify({ option: '选项1' })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    logEvent('✅ 投票成功', 'success');
+                    return result;
+                } else {
+                    logEvent(`❌ 投票失败: ${result.error}`, 'error');
+                    throw new Error(result.error);
+                }
+            } catch (error) {
+                logEvent(`❌ 投票异常: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+
+        // 初始化事件监听
+        document.getElementById('testCreate').addEventListener('click', async () => {
+            const button = document.getElementById('testCreate');
+            button.disabled = true;
+
+            try {
+                const pollID = await createTestPoll();
+                logEvent(`投票ID: ${pollID}`, 'info');
+
+                // 自动对该投票进行投票
+                setTimeout(() => {
+                    executeTestVote(pollID);
+                }, 1000);
+            } catch (error) {
+                // 错误已在函数内处理
+            }
+
+            button.disabled = false;
+        });
+
+        document.getElementById('testVote').addEventListener('click', async () => {
+            const button = document.getElementById('testVote');
+            button.disabled = true;
+
+            try {
+                // 创建新投票并立即投票
+                const pollID = await createTestPoll();
+                await executeTestVote(pollID);
+            } catch (error) {
+                // 错误已在函数内处理
+            }
+
+            button.disabled = false;
+        });
+
+        document.getElementById('clearLog').addEventListener('click', () => {
+            document.getElementById('eventLog').innerHTML = '';
+            logEvent('日志已清空', 'info');
+        });
+
+        // 页面加载时连接SSE
+        window.addEventListener('load', () => {
+            logEvent('页面加载完成，开始连接SSE...', 'info');
+            connectSSE();
+        });
+
+        // 页面关闭时断开连接
+        window.addEventListener('beforeunload', () => {
+            if (sseConnection) {
+                sseConnection.close();
+                logEvent('SSE连接已断开', 'info');
+            }
+        });
+    </script>
+</body>
+</html>

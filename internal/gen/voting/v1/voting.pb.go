@@ -1626,6 +1626,86 @@ func (x *ListMyCreatedPollStatsResponse) GetNextCursor() string {
 	return ""
 }
 
+type PingRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingRequest) Reset() {
+	*x = PingRequest{}
+	mi := &file_voting_v1_voting_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingRequest) ProtoMessage() {}
+
+func (x *PingRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_voting_v1_voting_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingRequest.ProtoReflect.Descriptor instead.
+func (*PingRequest) Descriptor() ([]byte, []int) {
+	return file_voting_v1_voting_proto_rawDescGZIP(), []int{27}
+}
+
+type PingResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PingResponse) Reset() {
+	*x = PingResponse{}
+	mi := &file_voting_v1_voting_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PingResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PingResponse) ProtoMessage() {}
+
+func (x *PingResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_voting_v1_voting_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PingResponse.ProtoReflect.Descriptor instead.
+func (*PingResponse) Descriptor() ([]byte, []int) {
+	return file_voting_v1_voting_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *PingResponse) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
 var File_voting_v1_voting_proto protoreflect.FileDescriptor
 
 const file_voting_v1_voting_proto_rawDesc = "" +
@@ -1756,7 +1836,10 @@ const file_voting_v1_voting_proto_rawDesc = "" +
 	"\x1eListMyCreatedPollStatsResponse\x12%\n" +
 	"\x05polls\x18\x01 \x03(\v2\x0f.voting.v1.PollR\x05polls\x12\x1f\n" +
 	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor2\xc6\a\n" +
+	"nextCursor\"\r\n" +
+	"\vPingRequest\"&\n" +
+	"\fPingResponse\x12\x16\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status2\xff\a\n" +
 	"\rVotingService\x12I\n" +
 	"\n" +
 	"CreatePoll\x12\x1c.voting.v1.CreatePollRequest\x1a\x1d.voting.v1.CreatePollResponse\x12F\n" +
@@ -1772,7 +1855,8 @@ const file_voting_v1_voting_proto_rawDesc = "" +
 	"\x13ListPublicPollStats\x12%.voting.v1.ListPublicPollStatsRequest\x1a&.voting.v1.ListPublicPollStatsResponse\x12I\n" +
 	"\n" +
 	"GetMyVotes\x12\x1c.voting.v1.GetMyVotesRequest\x1a\x1d.voting.v1.GetMyVotesResponse\x12m\n" +
-	"\x16ListMyCreatedPollStats\x12(.voting.v1.ListMyCreatedPollStatsRequest\x1a).voting.v1.ListMyCreatedPollStatsResponseB-Z+vote-system/internal/gen/voting/v1;votingv1b\x06proto3"
+	"\x16ListMyCreatedPollStats\x12(.voting.v1.ListMyCreatedPollStatsRequest\x1a).voting.v1.ListMyCreatedPollStatsResponse\x127\n" +
+	"\x04Ping\x12\x16.voting.v1.PingRequest\x1a\x17.voting.v1.PingResponseB-Z+vote-system/internal/gen/voting/v1;votingv1b\x06proto3"
 
 var (
 	file_voting_v1_voting_proto_rawDescOnce sync.Once
@@ -1786,7 +1870,7 @@ func file_voting_v1_voting_proto_rawDescGZIP() []byte {
 	return file_voting_v1_voting_proto_rawDescData
 }
 
-var file_voting_v1_voting_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_voting_v1_voting_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_voting_v1_voting_proto_goTypes = []any{
 	(*Poll)(nil),                           // 0: voting.v1.Poll
 	(*PollSummary)(nil),                    // 1: voting.v1.PollSummary
@@ -1815,22 +1899,24 @@ var file_voting_v1_voting_proto_goTypes = []any{
 	(*GetMyVotesResponse)(nil),             // 24: voting.v1.GetMyVotesResponse
 	(*ListMyCreatedPollStatsRequest)(nil),  // 25: voting.v1.ListMyCreatedPollStatsRequest
 	(*ListMyCreatedPollStatsResponse)(nil), // 26: voting.v1.ListMyCreatedPollStatsResponse
-	nil,                                    // 27: voting.v1.Poll.VotesEntry
-	(*timestamppb.Timestamp)(nil),          // 28: google.protobuf.Timestamp
+	(*PingRequest)(nil),                    // 27: voting.v1.PingRequest
+	(*PingResponse)(nil),                   // 28: voting.v1.PingResponse
+	nil,                                    // 29: voting.v1.Poll.VotesEntry
+	(*timestamppb.Timestamp)(nil),          // 30: google.protobuf.Timestamp
 }
 var file_voting_v1_voting_proto_depIdxs = []int32{
-	27, // 0: voting.v1.Poll.votes:type_name -> voting.v1.Poll.VotesEntry
-	28, // 1: voting.v1.Poll.created_at:type_name -> google.protobuf.Timestamp
-	28, // 2: voting.v1.Poll.expires_at:type_name -> google.protobuf.Timestamp
-	28, // 3: voting.v1.PollSummary.created_at:type_name -> google.protobuf.Timestamp
-	28, // 4: voting.v1.PollSummary.expires_at:type_name -> google.protobuf.Timestamp
-	28, // 5: voting.v1.CreatePollRequest.expires_at:type_name -> google.protobuf.Timestamp
+	29, // 0: voting.v1.Poll.votes:type_name -> voting.v1.Poll.VotesEntry
+	30, // 1: voting.v1.Poll.created_at:type_name -> google.protobuf.Timestamp
+	30, // 2: voting.v1.Poll.expires_at:type_name -> google.protobuf.Timestamp
+	30, // 3: voting.v1.PollSummary.created_at:type_name -> google.protobuf.Timestamp
+	30, // 4: voting.v1.PollSummary.expires_at:type_name -> google.protobuf.Timestamp
+	30, // 5: voting.v1.CreatePollRequest.expires_at:type_name -> google.protobuf.Timestamp
 	0,  // 6: voting.v1.CreatePollResponse.poll:type_name -> voting.v1.Poll
 	0,  // 7: voting.v1.ClosePollResponse.poll:type_name -> voting.v1.Poll
 	0,  // 8: voting.v1.VoteResponse.poll:type_name -> voting.v1.Poll
 	0,  // 9: voting.v1.UndoVoteResponse.poll:type_name -> voting.v1.Poll
-	28, // 10: voting.v1.SearchPollsRequest.created_after:type_name -> google.protobuf.Timestamp
-	28, // 11: voting.v1.SearchPollsRequest.created_before:type_name -> google.protobuf.Timestamp
+	30, // 10: voting.v1.SearchPollsRequest.created_after:type_name -> google.protobuf.Timestamp
+	30, // 11: voting.v1.SearchPollsRequest.created_before:type_name -> google.protobuf.Timestamp
 	1,  // 12: voting.v1.SearchPollsResponse.polls:type_name -> voting.v1.PollSummary
 	0,  // 13: voting.v1.GetPollStatsResponse.polls:type_name -> voting.v1.Poll
 	0,  // 14: voting.v1.GetPollResponse.poll:type_name -> voting.v1.Poll
@@ -1851,20 +1937,22 @@ var file_voting_v1_voting_proto_depIdxs = []int32{
 	20, // 29: voting.v1.VotingService.ListPublicPollStats:input_type -> voting.v1.ListPublicPollStatsRequest
 	23, // 30: voting.v1.VotingService.GetMyVotes:input_type -> voting.v1.GetMyVotesRequest
 	25, // 31: voting.v1.VotingService.ListMyCreatedPollStats:input_type -> voting.v1.ListMyCreatedPollStatsRequest
-	3,  // 32: voting.v1.VotingService.CreatePoll:output_type -> voting.v1.CreatePollResponse
-	5,  // 33: voting.v1.VotingService.ClosePoll:output_type -> voting.v1.ClosePollResponse
-	7,  // 34: voting.v1.VotingService.DeletePoll:output_type -> voting.v1.DeletePollResponse
-	9,  // 35: voting.v1.VotingService.Vote:output_type -> voting.v1.VoteResponse
-	11, // 36: voting.v1.VotingService.UndoVote:output_type -> voting.v1.UndoVoteResponse
-	17, // 37: voting.v1.VotingService.GetPoll:output_type -> voting.v1.GetPollResponse
-	13, // 38: voting.v1.VotingService.SearchPolls:output_type -> voting.v1.SearchPollsResponse
-	15, // 39: voting.v1.VotingService.GetPollStats:output_type -> voting.v1.GetPollStatsResponse
-	19, // 40: voting.v1.VotingService.ListPublicPolls:output_type -> voting.v1.ListPublicPollsResponse
-	21, // 41: voting.v1.VotingService.ListPublicPollStats:output_type -> voting.v1.ListPublicPollStatsResponse
-	24, // 42: voting.v1.VotingService.GetMyVotes:output_type -> voting.v1.GetMyVotesResponse
-	26, // 43: voting.v1.VotingService.ListMyCreatedPollStats:output_type -> voting.v1.ListMyCreatedPollStatsResponse
-	32, // [32:44] is the sub-list for method output_type
-	20, // [20:32] is the sub-list for method input_type
+	27, // 32: voting.v1.VotingService.Ping:input_type -> voting.v1.PingRequest
+	3,  // 33: voting.v1.VotingService.CreatePoll:output_type -> voting.v1.CreatePollResponse
+	5,  // 34: voting.v1.VotingService.ClosePoll:output_type -> voting.v1.ClosePollResponse
+	7,  // 35: voting.v1.VotingService.DeletePoll:output_type -> voting.v1.DeletePollResponse
+	9,  // 36: voting.v1.VotingService.Vote:output_type -> voting.v1.VoteResponse
+	11, // 37: voting.v1.VotingService.UndoVote:output_type -> voting.v1.UndoVoteResponse
+	17, // 38: voting.v1.VotingService.GetPoll:output_type -> voting.v1.GetPollResponse
+	13, // 39: voting.v1.VotingService.SearchPolls:output_type -> voting.v1.SearchPollsResponse
+	15, // 40: voting.v1.VotingService.GetPollStats:output_type -> voting.v1.GetPollStatsResponse
+	19, // 41: voting.v1.VotingService.ListPublicPolls:output_type -> voting.v1.ListPublicPollsResponse
+	21, // 42: voting.v1.VotingService.ListPublicPollStats:output_type -> voting.v1.ListPublicPollStatsResponse
+	24, // 43: voting.v1.VotingService.GetMyVotes:output_type -> voting.v1.GetMyVotesResponse
+	26, // 44: voting.v1.VotingService.ListMyCreatedPollStats:output_type -> voting.v1.ListMyCreatedPollStatsResponse
+	28, // 45: voting.v1.VotingService.Ping:output_type -> voting.v1.PingResponse
+	33, // [33:46] is the sub-list for method output_type
+	20, // [20:33] is the sub-list for method input_type
 	20, // [20:20] is the sub-list for extension type_name
 	20, // [20:20] is the sub-list for extension extendee
 	0,  // [0:20] is the sub-list for field type_name
@@ -1881,7 +1969,7 @@ func file_voting_v1_voting_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_voting_v1_voting_proto_rawDesc), len(file_voting_v1_voting_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   28,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

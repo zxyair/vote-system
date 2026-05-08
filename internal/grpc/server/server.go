@@ -115,6 +115,10 @@ func (s *Server) ListMyCreatedPollStats(ctx context.Context, req *votingv1.ListM
 	return &votingv1.ListMyCreatedPollStatsResponse{Polls: polls, NextCursor: next}, nil
 }
 
+func (s *Server) Ping(ctx context.Context, req *votingv1.PingRequest) (*votingv1.PingResponse, error) {
+	return &votingv1.PingResponse{Status: "ok"}, nil
+}
+
 func toStatus(err error) error {
 	switch {
 	case service.IsNotFound(err):

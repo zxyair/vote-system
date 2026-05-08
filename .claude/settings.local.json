@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git add *)",
       "Bash(go build *)",
-      "Bash(./httpserver *)"
+      "Bash(./httpserver *)",
+      "Bash(curl -s -X POST http://localhost:8080/votes/7a3bed10-27f9-4ab1-962e-68324bf09a55/vote -H 'Content-Type: application/json' -H 'X-User-Id: test_user_2' -H 'Idempotency-Key: test_vote___CMDSUB_OUTPUT__' -d '{\"option\": \"Python\"}')",
+      "Bash(curl *)"
     ]
   }
 }

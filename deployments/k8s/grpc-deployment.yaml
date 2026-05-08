@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpcserver-deployment
+  labels:
+    app: grpcserver
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: grpcserver
+  template:
+    metadata:
+      labels:
+        app: grpcserver
+    spec:
+      containers:
+      - name: grpcserver
+        image: grpcserver:latest
+        ports:
+        - containerPort: 9090
+        env:
+        - name: GRPC_ADDR
+          value: ":9090"
+        - name: REDIS_ADDR
+          value: "redis-service:6379"
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 9090
+          initialDelaySeconds: 5
+          periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grpcserver-service
+spec:
+  selector:
+    app: grpcserver
+  ports:
+  - protocol: TCP
+    port: 9090
+    targetPort: 9090
+  type: ClusterIP

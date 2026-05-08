@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"sync"
 	"time"
 	"vote-system/internal/obs"
@@ -151,23 +152,31 @@ func (h *sseHub) remove(c *sseConn) {
 func (h *sseHub) broadcast(msg []byte) {
 	start := time.Now()
 	success := true
+	totalSent := 0
+	totalDropped := 0
 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
-	for _, m := range h.conns {
+	fmt.Printf("[DEBUG] broadcast - Total users: %d, Message: %s\n", len(h.conns), string(msg))
+
+	for userID, m := range h.conns {
 		for c := range m {
 			select {
 			case c.ch <- msg:
 				c.lastActive = time.Now()
 				obs.RecordBufferUsage(c.userID, 1024, len(c.ch))
+				totalSent++
 			default:
-				obs.RecordMessageDropped(c.userID)
+				obs.RecordMessageDropped(userID)
 				success = false
+				totalDropped++
+				fmt.Printf("[DEBUG] 消息发送失败，缓冲区已满 - User: %s\n", userID)
 			}
 		}
 	}
 
+	fmt.Printf("[DEBUG] broadcast completed - Sent: %d, Dropped: %d\n", totalSent, totalDropped)
 	obs.TrackSSEOp("", "broadcast", success, time.Since(start).Seconds())
 }
 
@@ -178,14 +187,26 @@ func (h *sseHub) notifyUser(userID string, msg []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	m := h.conns[userID]
-	for c := range m {
-		select {
-		case c.ch <- msg:
-			c.lastActive = time.Now()
-			obs.RecordBufferUsage(c.userID, 1024, len(c.ch))
-		default:
-			obs.RecordMessageDropped(userID)
-			success = false
+
+	// 添加调试日志
+	connCount := 0
+	if m != nil {
+		connCount = len(m)
+	}
+	fmt.Printf("[DEBUG] notifyUser - User: %s, Connections: %d, Message: %s\n", userID, connCount, string(msg))
+
+	if m != nil {
+		for c := range m {
+			select {
+			case c.ch <- msg:
+				c.lastActive = time.Now()
+				obs.RecordBufferUsage(c.userID, 1024, len(c.ch))
+				fmt.Printf("[DEBUG] 消息已发送到用户连接 - User: %s\n", userID)
+			default:
+				obs.RecordMessageDropped(userID)
+				success = false
+				fmt.Printf("[DEBUG] 消息发送失败，缓冲区已满 - User: %s\n", userID)
+			}
 		}
 	}
 
@@ -230,13 +251,25 @@ func (h *sseHub) notifyPoll(pollID string, msg []byte) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	m := h.pollConns[pollID]
-	for c := range m {
-		select {
-		case c.ch <- msg:
-			c.lastActive = time.Now()
-			obs.RecordBufferUsage("poll_"+pollID, 1024, len(c.ch))
-		default:
-			success = false
+
+	// 添加调试日志
+	connCount := 0
+	if m != nil {
+		connCount = len(m)
+	}
+	fmt.Printf("[DEBUG] notifyPoll - PollID: %s, Connections: %d, Message: %s\n", pollID, connCount, string(msg))
+
+	if m != nil {
+		for c := range m {
+			select {
+			case c.ch <- msg:
+				c.lastActive = time.Now()
+				obs.RecordBufferUsage("poll_"+pollID, 1024, len(c.ch))
+				fmt.Printf("[DEBUG] 消息已发送到连接 - PollID: %s\n", pollID)
+			default:
+				success = false
+				fmt.Printf("[DEBUG] 消息发送失败，缓冲区已满 - PollID: %s\n", pollID)
+			}
 		}
 	}
 
