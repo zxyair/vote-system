@@ -9,6 +9,7 @@ import (
 	votingv1 "vote-system/internal/gen/voting/v1"
 	"vote-system/internal/http/handler"
 	"vote-system/internal/http/middleware"
+	"vote-system/internal/metrics"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,8 +18,10 @@ func SetupRouter(client votingv1.VotingServiceClient) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 	r.Use(middleware.TokenBucket(200, 400, 20, 40))
+	r.Use(metrics.GinMiddleware())
 
 	r.GET("/healthz", func(c *gin.Context) { c.Status(http.StatusOK) })
+	r.GET("/metrics", gin.WrapH(metrics.MetricsHandler()))
 
 	hub := handler.NewSSEHubForRouter()
 	h := handler.New(client, hub)

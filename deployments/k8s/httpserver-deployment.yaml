@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpserver
+  namespace: vote-system
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: httpserver
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "8080"
+        prometheus.io/scrape: "true"
+      labels:
+        app: httpserver
+    spec:
+      containers:
+        - name: httpserver
+          image: vote-httpserver:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HTTP_ADDR
+              value: ":8080"
+            - name: GRPC_ADDR
+              value: "grpcserver:9090"
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10

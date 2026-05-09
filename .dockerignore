@@ -1,0 +1,14 @@
+.git
+.cursor
+
+# Local build and test output
+coverage
+coverage.out
+*.log
+*.test
+*.exe
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+

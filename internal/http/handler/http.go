@@ -29,6 +29,21 @@ func (h *HTTP) notifyPollInvalidate(pollID, reason string) {
 	h.hub.notifyPoll(pollID, msg)
 }
 
+func (h *HTTP) notifyResultsInvalidate() {
+	if h == nil || h.hub == nil {
+		return
+	}
+	msg, err := json.Marshal(invalidateMsg{
+		MyVotes:     true,
+		PublicStats: true,
+		MyCreated:   true,
+	})
+	if err != nil {
+		return
+	}
+	h.hub.broadcast(msg)
+}
+
 func New(client votingv1.VotingServiceClient, hub *sseHub) *HTTP {
 	return &HTTP{Client: client, hub: hub}
 }
@@ -108,14 +123,7 @@ func (h *HTTP) ClosePoll(c *gin.Context) {
 	}
 	if h.hub != nil && resp.Poll != nil {
 		h.notifyPollInvalidate(resp.Poll.GetId(), "close")
-		if msg, err := json.Marshal(invalidateMsg{MyCreated: true}); err == nil {
-			h.hub.notifyUser(resp.Poll.GetCreatedBy(), msg)
-		}
-		if resp.Poll.GetIsPublic() {
-			if msg, err := json.Marshal(invalidateMsg{PublicStats: true}); err == nil {
-				h.hub.broadcast(msg)
-			}
-		}
+		h.notifyResultsInvalidate()
 	}
 	c.JSON(http.StatusOK, resp.Poll)
 }
@@ -141,14 +149,7 @@ func (h *HTTP) DeletePoll(c *gin.Context) {
 	}
 	if h.hub != nil && pref != nil {
 		h.notifyPollInvalidate(pref.GetId(), "delete")
-		if msg, err := json.Marshal(invalidateMsg{MyCreated: true}); err == nil {
-			h.hub.notifyUser(pref.GetCreatedBy(), msg)
-		}
-		if pref.GetIsPublic() {
-			if msg, err := json.Marshal(invalidateMsg{PublicStats: true}); err == nil {
-				h.hub.broadcast(msg)
-			}
-		}
+		h.notifyResultsInvalidate()
 	}
 	c.JSON(http.StatusOK, gin.H{"deleted": resp.Deleted})
 }
@@ -178,20 +179,7 @@ func (h *HTTP) Vote(c *gin.Context) {
 	}
 	if h.hub != nil && resp.Poll != nil {
 		h.notifyPollInvalidate(resp.Poll.GetId(), "vote")
-		// voter
-		if msg, err := json.Marshal(invalidateMsg{MyVotes: true}); err == nil {
-			h.hub.notifyUser(middleware.UserID(c), msg)
-		}
-		// creator's created list stats
-		if msg, err := json.Marshal(invalidateMsg{MyCreated: true}); err == nil {
-			h.hub.notifyUser(resp.Poll.GetCreatedBy(), msg)
-		}
-		// public stats if public poll
-		if resp.Poll.GetIsPublic() {
-			if msg, err := json.Marshal(invalidateMsg{PublicStats: true}); err == nil {
-				h.hub.broadcast(msg)
-			}
-		}
+		h.notifyResultsInvalidate()
 	}
 	c.JSON(http.StatusOK, resp.Poll)
 }
@@ -210,17 +198,7 @@ func (h *HTTP) UndoVote(c *gin.Context) {
 	}
 	if h.hub != nil && resp.Poll != nil {
 		h.notifyPollInvalidate(resp.Poll.GetId(), "undo")
-		if msg, err := json.Marshal(invalidateMsg{MyVotes: true}); err == nil {
-			h.hub.notifyUser(middleware.UserID(c), msg)
-		}
-		if msg, err := json.Marshal(invalidateMsg{MyCreated: true}); err == nil {
-			h.hub.notifyUser(resp.Poll.GetCreatedBy(), msg)
-		}
-		if resp.Poll.GetIsPublic() {
-			if msg, err := json.Marshal(invalidateMsg{PublicStats: true}); err == nil {
-				h.hub.broadcast(msg)
-			}
-		}
+		h.notifyResultsInvalidate()
 	}
 	c.JSON(http.StatusOK, resp.Poll)
 }

@@ -1,0 +1,28 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /src
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/grpcserver ./cmd/grpcserver
+
+FROM alpine:latest
+
+RUN addgroup -S app && adduser -S app -G app
+
+WORKDIR /app
+
+COPY --from=builder /out/grpcserver /app/grpcserver
+
+ENV GRPC_ADDR=:9090
+ENV METRICS_ADDR=:9091
+ENV REDIS_ADDR=redis:6379
+
+EXPOSE 9090
+EXPOSE 9091
+
+USER app
+
+ENTRYPOINT ["/app/grpcserver"]

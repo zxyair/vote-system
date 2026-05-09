@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +12,7 @@ import (
 
 	votingv1 "vote-system/internal/gen/voting/v1"
 	grpcserver "vote-system/internal/grpc/server"
+	"vote-system/internal/metrics"
 	"vote-system/internal/service"
 	memorystore "vote-system/internal/store/memory"
 	redisstore "vote-system/internal/store/redis"
@@ -21,6 +23,7 @@ import (
 
 func main() {
 	addr := getenv("GRPC_ADDR", ":9090")
+	metricsAddr := getenv("METRICS_ADDR", ":9091")
 	redisAddr := os.Getenv("REDIS_ADDR")
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 
@@ -45,11 +48,16 @@ func main() {
 	}
 	svc := service.New(store)
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(grpc.UnaryInterceptor(metrics.UnaryServerInterceptor))
 	votingv1.RegisterVotingServiceServer(s, grpcserver.New(svc))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+	metricsSrv := &http.Server{
+		Addr:    metricsAddr,
+		Handler: metrics.MetricsHandler(),
+	}
 
 	go func() {
 		log.Printf("gRPC server running %s", addr)
@@ -58,8 +66,19 @@ func main() {
 		}
 	}()
 
+	go func() {
+		log.Printf("gRPC metrics server running %s", metricsAddr)
+		if err := metricsSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("grpc metrics serve error: %v", err)
+		}
+	}()
+
 	<-ctx.Done()
 	log.Println("shutting down gRPC server")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = metricsSrv.Shutdown(shutdownCtx)
+
 	stopped := make(chan struct{})
 	go func() {
 		s.GracefulStop()

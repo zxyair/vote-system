@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grpcserver
+  namespace: vote-system
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: grpcserver
+  template:
+    metadata:
+      annotations:
+        prometheus.io/path: /metrics
+        prometheus.io/port: "9091"
+        prometheus.io/scrape: "true"
+      labels:
+        app: grpcserver
+    spec:
+      containers:
+        - name: grpcserver
+          image: vote-grpcserver:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GRPC_ADDR
+              value: ":9090"
+            - name: METRICS_ADDR
+              value: ":9091"
+            - name: REDIS_ADDR
+              value: "redis:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secret
+                  key: password
+          ports:
+            - name: grpc
+              containerPort: 9090
+            - name: metrics
+              containerPort: 9091
+          readinessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: grpc
+            initialDelaySeconds: 15
+            periodSeconds: 10

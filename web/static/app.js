@@ -67,22 +67,6 @@ const query = new URLSearchParams(qs || "");
 return { path: p, parts, query };
 }
 
-// #region agent log
-fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-  method: "POST",
-  headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
-  body: JSON.stringify({
-    sessionId: "cd7378",
-    runId: "pre-fix2",
-    hypothesisId: "H5",
-    location: "web/static/app.js:45",
-    message: "app_js_loaded",
-    data: { buildTag: "2026-03-17-pre-fix2", hasParseProtoTimestamp: typeof parseProtoTimestamp === "function" },
-    timestamp: Date.now(),
-  }),
-}).catch(() => {});
-// #endregion
-
 async function api(path, { method = "GET", body } = {}) {
 const headers = { "X-User-Id": getUserId() };
 if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -99,31 +83,6 @@ try {
   data = text;
 }
 if (!resp.ok) {
-  // #region agent log
-  fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "cd7378",
-    },
-    body: JSON.stringify({
-      sessionId: "cd7378",
-      runId: "pre-fix2",
-      hypothesisId: "H2",
-      location: "web/static/app.js:60",
-      message: "api_error",
-      data: {
-        path,
-        method,
-        status: resp.status,
-        statusText: resp.statusText,
-        responseText: text,
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   const msg = data?.error || resp.statusText;
   throw new Error(`${resp.status} ${msg}`);
 }
@@ -486,21 +445,6 @@ try {
         loadQueued = true;
         return loadInFlight;
       }
-      // #region agent log
-      fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
-        body: JSON.stringify({
-          sessionId: "cd7378",
-          runId: "sse-verify",
-          hypothesisId: "H_LOAD",
-          location: "web/static/app.js:load",
-          message: "poll_load_start",
-          data: { pollId, loadQueued, hasInFlight: Boolean(loadInFlight) },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion
 
       loadInFlight = (async () => {
         const p = normalizePoll(await api(`/polls/${encodeURIComponent(pollId)}`));
@@ -560,27 +504,6 @@ try {
           }
         });
       });
-
-      // #region agent log
-      try {
-        const voteSum = Object.values(votes).reduce((a, b) => a + Number(b || 0), 0);
-        fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
-          body: JSON.stringify({
-            sessionId: "cd7378",
-            runId: "sse-verify",
-            hypothesisId: "H_LOAD",
-            location: "web/static/app.js:load",
-            message: "poll_load_rendered",
-            data: { pollId: p.id, isClosed: Boolean(p.isClosed), voteSum },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-      } catch {
-        // ignore
-      }
-      // #endregion
       })()
         .finally(async () => {
           loadInFlight = null;
@@ -601,57 +524,11 @@ try {
       window.__pollSSE = es;
       es.onopen = () => {
         pollSseStatus.textContent = "SSE: connected";
-        // #region agent log
-        fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
-          body: JSON.stringify({
-            sessionId: "cd7378",
-            runId: "sse-verify",
-            hypothesisId: "H_SSE",
-            location: "web/static/app.js:poll_sse",
-            message: "poll_sse_open",
-            data: { pollId, uid, url: `/events/polls/${pollId}?user_id=${uid || ""}` },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
       };
       es.onerror = () => {
         pollSseStatus.textContent = "SSE: reconnecting";
-        // #region agent log
-        fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
-          body: JSON.stringify({
-            sessionId: "cd7378",
-            runId: "sse-verify",
-            hypothesisId: "H_SSE",
-            location: "web/static/app.js:poll_sse",
-            message: "poll_sse_error",
-            data: { pollId, uid },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
       };
       es.addEventListener("poll_invalidate", async (evt) => {
-        // #region agent log
-        fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "cd7378" },
-          body: JSON.stringify({
-            sessionId: "cd7378",
-            runId: "post-sse",
-            hypothesisId: "SSE_POLL",
-            location: "web/static/app.js:poll_sse",
-            message: "poll_invalidate_received",
-            data: { pollId, data: evt && evt.data ? String(evt.data).slice(0, 200) : "" },
-            timestamp: Date.now(),
-          }),
-        }).catch(() => {});
-        // #endregion
-
         try {
           await load();
         } catch (e) {
@@ -921,28 +798,6 @@ try {
 
   nav("/home");
 } catch (e) {
-  // #region agent log
-  fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Debug-Session-Id": "cd7378",
-    },
-    body: JSON.stringify({
-      sessionId: "cd7378",
-      runId: "pre-fix",
-      hypothesisId: "H1",
-      location: "web/static/app.js:673",
-      message: "render_error",
-      data: {
-        error: e && e.message ? e.message : String(e),
-        hasParseProtoTimestamp: typeof parseProtoTimestamp === "function",
-      },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-  // #endregion
-
   console.error(e);
   app().innerHTML = layout("出错了", `<section class="card"><p class="muted">${escapeHtml(e.message || String(e))}</p></section>`);
   bindNavButtons(app());
@@ -951,58 +806,3 @@ try {
 
 window.addEventListener("hashchange", () => render());
 render();
-
-// #region agent log
-window.addEventListener("error", (event) => {
-  try {
-    fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "cd7378",
-      },
-      body: JSON.stringify({
-        sessionId: "cd7378",
-        runId: "pre-fix2",
-        hypothesisId: "H3",
-        location: "web/static/app.js:685",
-        message: "window_error",
-        data: {
-          message: event.message,
-          filename: event.filename,
-          lineno: event.lineno,
-          colno: event.colno,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  } catch {
-    // ignore logging failure
-  }
-});
-
-window.addEventListener("unhandledrejection", (event) => {
-  try {
-    fetch("http://127.0.0.1:7402/ingest/748aa12d-1387-4465-9d4b-c3e83bffd60c", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Debug-Session-Id": "cd7378",
-      },
-      body: JSON.stringify({
-        sessionId: "cd7378",
-        runId: "pre-fix2",
-        hypothesisId: "H4",
-        location: "web/static/app.js:703",
-        message: "unhandled_rejection",
-        data: {
-          reason: event.reason && event.reason.message ? event.reason.message : String(event.reason || ""),
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  } catch {
-    // ignore logging failure
-  }
-});
-// #endregion

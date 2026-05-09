@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - redis-secret.yaml
+  - redis-deployment.yaml
+  - redis-service.yaml
+  - grpcserver-deployment.yaml
+  - grpcserver-service.yaml
+  - httpserver-deployment.yaml
+  - httpserver-service.yaml
+  - ingress.yaml
+  - prometheus-rbac.yaml
+  - prometheus-config.yaml
+  - prometheus-deployment.yaml
+  - prometheus-service.yaml
+  - grafana-datasource.yaml
+  - grafana-dashboard.yaml
+  - grafana-deployment.yaml
+  - grafana-service.yaml
